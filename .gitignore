@@ -36,6 +36,10 @@
 !fdaPDE/multithreading/*
 !fdaPDE/splines/
 !fdaPDE/splines/*
+!fdaPDE/isogeometric_analysis/
+!fdaPDE/isogeometric_analysis/*
+!fdaPDE/isogeometric_analysis/basis/
+!fdaPDE/isogeometric_analysis/basis/*
 !test/
 !test/*
 !test/data/
