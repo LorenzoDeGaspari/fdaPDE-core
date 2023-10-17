@@ -154,6 +154,19 @@ template <typename F, typename T> double integrate_1D(double a, double b, const 
     return (b - a) / 2 * value;
 }
 
+// integration of f() over 2D quads of type [a,b]x[c,d], using formula
+// \int_{[a,b]x[c,d]} f(x) -> (b-a)*(d-c)/4 * \sum_{iq} w_{iq} * f((b-a)/2*x + (b+a)/2, (d-c)/2*y + (d+c)/2)
+// and quadrature rule T
+template <typename F, typename T> double integrate_2D(double a, double b, double c, double d, const F& f, const T& t) {
+    static_assert(T::input_dim == 2, "quadrature rule input_dim != 2");
+    double value = 0;
+    for (std::size_t iq = 0; iq < t.num_nodes; ++iq) {
+        value += f(SVector<2>(((b - a) / 2) * t.nodes[iq][0] + (b + a) / 2, ((d - c) / 2) * t.nodes[iq][1] + (d + c) / 2)) * t.weights[iq];
+    }
+    // correct for measure of square
+    return (b - a) * (d - c) / 4 * value;
+}
+
 }   // namespace core
 }   // namespace fdapde
 

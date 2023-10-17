@@ -38,6 +38,8 @@
 #include "src/optimization_test.cpp"
 //splines
 #include "src/spline_test.cpp"
+//isogeometric analysis
+#include "src/iga_test.cpp"
 
 int main(int argc, char** argv) {
     // start testing

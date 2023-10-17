@@ -301,6 +301,28 @@ template <> struct IntegratorTable<3, 11> {
     };
 };
 
+// 2D quad elements
+// reference element: square made from cartesian product (-1,1)x(-1,1) 
+
+// 4 point formula, degree of precision 3
+template <> struct IntegratorTable<2, 4, GaussLegendre> {
+    enum {
+        input_dim = 2,  // input space dimension of integrand field
+        num_nodes = 4  // number of qudrature nodes
+    };
+    // position of nodes (in barycentric coordinates)
+    std::array<SVector<2>, 4> nodes = {
+       SVector<2>(-0.5773502691896257, -0.5773502691896257),
+       SVector<2>(-0.5773502691896257, 0.5773502691896257),
+       SVector<2>(0.5773502691896257, -0.5773502691896257),
+       SVector<2>(0.5773502691896257, 0.5773502691896257)
+    };
+    // weights of the quadrature rule
+    std::array<double, 4> weights = {
+        0.9999999999999996, 0.9999999999999996, 0.9999999999999996, 0.9999999999999996
+    };
+};
+
 }   // namespace core
 }   // namespace fdaPDE
 
