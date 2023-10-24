@@ -30,6 +30,10 @@ namespace core{
 // Define the NURBS basis as R
 // R_ip(x) =  [w_i/[\sum_{j} (w_j*N_jp(x))]]*N_ip(x)
 
+// forward declaration of template class, to be specialized for each value of M
+// R = nurbs order;     M = embedding dimension
+template <int R, int M> class Nurbs;
+
 // A 1D NURBS of order R centered in knot u_i.
 template <int R> class Nurbs<1, R> : public ScalarExpr<1, Nurbs<1, R>>{
     private:
@@ -46,13 +50,13 @@ template <int R> class Nurbs<1, R> : public ScalarExpr<1, Nurbs<1, R>>{
      inline double operator()(SVector<1> x) const {
         double den=0.;
         // compute the sum that appears at the denominator of the formula
-        for(std:size_t j=0;j<knots_.rows();j++){
-            den += weights_[j]*Spline<R, R>(knots_, j)(x);
+        for(std::size_t j=0;j<knots_.rows() - R - 1;j++){
+            den += weights_[j]*Spline<R>(knots_, j)(x);
         }
-        return (weights_[i_]/den) * Spline<R, R>(knots_, i_)(x);
+        return (weights_[i_]/den) * Spline<R>(knots_, i_)(x);
     }
 
-}
+};
 
 
 } // namespace core
