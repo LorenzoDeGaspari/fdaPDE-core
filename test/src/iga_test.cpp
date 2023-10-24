@@ -17,9 +17,12 @@
 #include <gtest/gtest.h>   // testing framework
 
 #include <fdaPDE/utils.h>
+#include <fdaPDE/isogeometric_analysis.h>
 using fdapde::core::integrate_2D;
 using fdapde::core::IntegratorTable;
 using fdapde::core::GaussLegendre;
+using fdapde::core::Nurbs;
+using fdapde::core::NurbsBasis;
 
 // tests if the integration of the constant field 1 over a quad equals its measure
 TEST(isogeometric_analysis_test, integrate_constant) {
@@ -46,4 +49,22 @@ TEST(isogeometric_analysis_test, integrate_cubic) {
     std::function<double(SVector<2>)> f = [](SVector<2> x) -> double { return x[0]*x[0]*x[0]+x[1]*x[1]*x[1]+x[0]*x[0]*x[1]; };
     // test integration on the rectangle [0,1]x[0,2] ---> the solution is 31/6
     EXPECT_TRUE(almost_equal(31.0/6.0, integrate_2D(0, 1, 0, 2, f, table)));
+}
+
+// test 1D nurbs basis (functions are accessibile and callable)
+TEST(isogeometric_analysis_test, nurbs_basis_1D) {
+    DVector<double> nodes;
+    DVector<double> weights;
+    nodes.resize(3);
+    weights.resize(5);
+    // uniform weight vector
+    for(size_t i = 0; i < 5; i++)weights(i)=1.;
+    // open uniform knot vector
+    for(size_t i = 0; i < 3; i++)nodes(i)=1.*i;
+
+    NurbsBasis<1, 2> basis(nodes, weights);
+    for(size_t i = 0; i < basis.size(); i++){
+        // check that each element can be called correctly
+        basis[i](SVector<1>(0));
+    }
 }

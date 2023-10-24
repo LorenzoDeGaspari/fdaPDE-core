@@ -32,7 +32,7 @@ namespace core{
 
 // forward declaration of template class, to be specialized for each value of M
 // R = nurbs order;     M = embedding dimension
-template <int R, int M> class Nurbs;
+template <int M, int R> class Nurbs;
 
 // A 1D NURBS of order R centered in knot u_i.
 template <int R> class Nurbs<1, R> : public ScalarExpr<1, Nurbs<1, R>>{
