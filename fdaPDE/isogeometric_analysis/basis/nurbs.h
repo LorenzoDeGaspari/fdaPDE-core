@@ -58,6 +58,32 @@ template <int R> class Nurbs<1, R> : public ScalarExpr<1, Nurbs<1, R>>{
 
 };
 
+// A 2D NURBS of order R centered in knot (u_i, v_j)
+template <int R> class Nurbs<2, R> : public ScalarExpr<2, Nurbs<2, R>>{
+    private:
+     DVector<double> knots_x_ {};   // vector of knots 1st coordinate
+     DVector<double> knots_y_ {};   // vector of knots 2nd coordinate
+     DMatrix<double> weights_ {};   // vector of weights
+     std::size_t i_;     // 1st knot index
+     std::size_t j_;     // 2nd knot index
+
+    public:
+     // constructor
+     Nurbs() = default;
+     Nurbs(const DVector<double>& knots_x, const DVector<double>& knots_y, const DMatrix<double>& weights, std::size_t i, std::size_t j) : knots_x_(knots_x), knots_y_(knots_y), weights_(weights), i_(i), j_(j) {};
+
+    // evaluates the NURBS at a given point 
+     inline double operator()(SVector<2> x) const {
+        double den=0.;
+        // compute the sum that appears at the denominator of the formula
+        for(std::size_t k=0;k<knots_x_.rows() - R - 1;k++){
+            for(std::size_t l=0;l<knots_y_.rows() - R - 1;l++)
+            den += weights_(k,l)*Spline<R>(knots_x_, k)(x.block<1,1>(0,0))*Spline<R>(knots_y_, l)(x.block<1,1>(1,0));
+        }
+        return (weights_(i_,j_)/den) * Spline<R>(knots_x_, i_)(x.block<1,1>(0,0)) * Spline<R>(knots_y_, j_)(x.block<1,1>(1,0));
+    }
+
+};
 
 } // namespace core
 } // namespace fdapde
