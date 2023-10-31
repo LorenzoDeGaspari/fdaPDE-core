@@ -19,5 +19,6 @@
 
 #include "isogeometric_analysis/basis/nurbs.h"
 #include "isogeometric_analysis/basis/nurbs_basis.h"
+#include "isogeometric_analysis/mesh/mesh.h"
 
 #endif // __FDAPDE_ISOGEOMETRIC_ANALYSIS_MODULE_H__
