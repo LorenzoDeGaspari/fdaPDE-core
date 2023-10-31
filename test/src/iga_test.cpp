@@ -68,3 +68,20 @@ TEST(isogeometric_analysis_test, nurbs_basis_1D) {
         basis[i](SVector<1>(0));
     }
 }
+
+// test 2D nurbs basis (functions are accessibile and callable)
+TEST(isogeometric_analysis_test, nurbs_basis_2D) {
+    DVector<double> nodes;
+    DMatrix<double> weights;
+    nodes.resize(3);
+    weights.resize(5,5);
+    // uniform weight vector
+    for(size_t i = 0; i < 5; i++)for(size_t j = 0; j < 5; j++)weights(i,j)=1.;
+    // open uniform knot vector
+    for(size_t i = 0; i < 3; i++)nodes(i)=1.*i;
+    NurbsBasis<2, 2> basis(nodes, weights);
+    for(size_t i = 0; i < basis.size(); i++){
+        // check that each element can be called correctly
+        basis[i](SVector<2>(0,0));
+    }
+}
