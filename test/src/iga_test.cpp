@@ -67,6 +67,8 @@ TEST(isogeometric_analysis_test, nurbs_basis_1D) {
     for(size_t i = 0; i < basis.size(); i++){
         // check that each element can be called correctly
         basis[i](SVector<1>(0));
+        basis[i].derive()(SVector<1>(0));
+        basis[i].deriveTwice()(SVector<1>(0));
     }
 }
 

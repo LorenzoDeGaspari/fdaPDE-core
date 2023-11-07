@@ -40,21 +40,47 @@ template <int R> class Nurbs<1, R> : public ScalarExpr<1, Nurbs<1, R>>{
      DVector<double> knots_ {};   // vector of knots
      DVector<double> weights_ {};   // vector of weights
      std::size_t i_;     // knot index where this basis is centered
+     ScalarField<1> denom_ = ScalarField<1>::Zero(); // store functor for the denominator in the formula
+     ScalarField<1> denom_x_ = ScalarField<1>::Zero(); // store functor for the denominator x derivative
+     ScalarField<1> denom_xx_ = ScalarField<1>::Zero(); // store functor for the denominator second x derivative
 
     public:
      // constructor
      Nurbs() = default;
-     Nurbs(const DVector<double>& knots, const DVector<double>& weights, std::size_t i) : knots_(knots), weights_(weights), i_(i) {};
+     Nurbs(const DVector<double>& knots, const DVector<double>& weights, std::size_t i) : knots_(knots), weights_(weights), i_(i) {
+        for(std::size_t j=0;j<knots_.rows() - R - 1;j++){
+            denom_ = denom_ + weights_[j]*Spline<R>(knots_, j); // sum(j) { w_j * N_j }
+            denom_x_ = denom_x_ + weights_[j]*Spline<R>(knots_, j).template derive<1>(); // sum(j) { w_j * N'_j }
+            denom_xx_ = denom_xx_ + weights_[j]*Spline<R>(knots_, j).template derive<2>(); // sum(j) { w_j * N''_j }
+        }
+     };
 
     // evaluates the NURBS at a given point 
      inline double operator()(SVector<1> x) const {
-        double den=0.;
-        // compute the sum that appears at the denominator of the formula
-        for(std::size_t j=0;j<knots_.rows() - R - 1;j++){
-            den += weights_[j]*Spline<R>(knots_, j)(x);
-        }
-        return (weights_[i_]/den) * Spline<R>(knots_, i_)(x);
-    }
+        return ((weights_[i_]/denom_) * Spline<R>(knots_, i_)) (x);
+     }
+
+     // returns a functor to evaluate derivative
+     //               N'_i*D - N_i*D'
+     // R'_ip = w_i * -------------- , where D is the denominator in the NURBS formula
+     //                     D^2
+     auto derive() const {
+        return (weights_[i_]/(denom_ * denom_)) *                       // w_i / D^2
+               (Spline<R>(knots_, i_).template derive<1>() * denom_     // N'_i*D
+               - Spline<R>(knots_, i_) * denom_x_);                     // -N_i*D'
+     }
+
+     // returns a functor to evaluate second derivative
+     //                N''_i*D^2 - N_i*D*D'' - 2*N'_i*D*D' + 2*N_i*D'^2
+     // R''_ip = w_i * ------------------------------------------------
+     //                                      D^3
+     auto deriveTwice() const {
+        return (weights_[i_]/(denom_*denom_*denom_)) *                              // w_i / D^3
+               (Spline<R>(knots_, i_).template derive<2>() * denom_ * denom_        // N''_i*D^2
+               - Spline<R>(knots_, i_) * denom_ * denom_xx_                         // -N_i*D*D''
+               - 2 * Spline<R>(knots_, i_).template derive<1>() * denom_ * denom_x_ // -2*N'_i*D*D'
+               + 2 * Spline<R>(knots_, i_) * denom_x_ * denom_x_);                  // 2*N_i*D'^2
+     }
 
 };
 
