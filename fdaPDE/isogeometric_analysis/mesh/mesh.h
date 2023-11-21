@@ -14,9 +14,17 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __NURBSDOMAIN_H__
-#define __NURBSDOMAIN_H__
+#ifndef __NURBSSURFACE_H__
+#define __NURBSSURFACE_H__
 
+#include <Eigen/Core>
+#include <array>
+#include <type_traits>
+#include <unordered_map>
+#include <vector>
+
+#include "../../utils/combinatorics.h"
+#include "../../utils/symbols.h"
 #include "../basis/nurbs_basis.h"
 #include "../../fields.h"
 
@@ -24,57 +32,48 @@ namespace fdapde{
 namespace core{
 
 // M local space dimension, N embedding space dimension, R NURBS order
-template <int M, int N,int R> class NurbsDomain;
+template <int M, int N,int R> class NurbsSurface;
 
 // partial specialization for M=2, N=3
 template <int R>
-class NurbsDomain<2,3,R> : public VectorExpr<2,3,NurbsDomain<2,3,R>> {
-
+class NurbsSurface<2,3,R> {
    protected:
-    // Nurbs basis
-    NurbsBasis<2,R> basis_;
+    // Nurbs  
+    NurbsBasis<2,R> nurbs_;
     // control points
     DMatrix<DVector<double>> control_points_;
+    // callable object representing the NURBS-parametrization
+    using Parametrization = VectorField<2,3>;
+    Parametrization surface_;
 
-   public:
-    NurbsDomain() = default;
-    NurbsDomain(const DVector<double>& knots, const DMatrix<double>& weights, 
-    const DMatrix<DVector<double>>& control_points) : NurbsDomain(knots, knots, weights, control_points) { };
-    NurbsDomain(const DVector<double>& knots_x, const DVector<double>& knots_y,
-    const DMatrix<double>& weights, const DMatrix<DVector<double>>& control_points) : basis_(knots_x,knots_y,weights), 
-    control_points_(control_points) { };
+    public:
+    NurbsSurface() = default;
+    NurbsSurface(const DVector<double>& knots, const DMatrix<double>& weights, 
+    const DMatrix<DVector<double>>& control_points) : NurbsSurface(knots, knots, weights, control_points) { };
+    NurbsSurface(const DVector<double>& knots_x, const DVector<double>& knots_y, const DMatrix<double>& weights, 
+    const DMatrix<DVector<double>>& control_points);
 
     // getters
-    const Nurbs<2, R>& nurbs(int ID) const { return basis_[ID]; };
-    int n_basis() const { return basis_.size(); };
+    const Nurbs<2, R>& nurbs(int ID) const { return nurbs_[ID]; };    
+    int n_nurbs() const { return nurbs_.size(); };
     const DMatrix<DVector<double>>& control_points() const{ return control_points_; };
     DMatrix<DVector<double>>& control_points() { return control_points_; };
-
-    // call operator for the domain parametrization
-    SVector<3> operator()(const SVector<2> & x) const;
-
+    const Parametrization & parametrization() const{ return surface_; };
 };
 
-// evaluate starting from the point x in the parametric domain
-// its corresponding point on the manifold
+
+//implementative details
+//constructor
 template <int R>
-SVector<3> NurbsDomain<2,3,R>::operator()(const SVector<2> & x) const{
+NurbsSurface<2,3,R>::NurbsSurface(const DVector<double>& knots_x, const DVector<double>& knots_y, 
+    const DMatrix<double>& weights, const DMatrix<DVector<double>>& control_points) : nurbs_(knots_x,knots_y,weights), 
+    control_points_(control_points){
 
-    SVector<3> ret(0.,0.,0.);
-    // for each basis function
-    for(std::size_t i = 0; i < basis_.size_x(); ++i){
-        for(std::size_t j = 0; j < basis_.size_y(); ++j){
-            // for each component
-            for(std::size_t k = 0; k < 3; ++k){
-                ret[k] += basis_(i,j)(x) * control_points_(i,j)[k];
-            }
-        }
-    }
-    return ret;
+        // TODO generate expression for parametrization
 
-}
+};
 
 }; // namespace core
 }; // namespace fdapde
   
-#endif   // __NURBSDOMAIN_H__
+#endif   // __NURBSSURFACE_H__
