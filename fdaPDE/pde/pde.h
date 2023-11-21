@@ -24,6 +24,7 @@
 #include "../utils/symbols.h"
 #include "../utils/integration/integrator.h"
 #include "differential_expressions.h"
+#include "differential_operators.h"
 
 namespace fdapde {
 namespace core {
@@ -59,7 +60,6 @@ class PDE : public PDEBase {
     typedef D DomainType;   // triangulated domain
     static constexpr int M = DomainType::local_dimension;
     static constexpr int N = DomainType::embedding_dimension;
-    static constexpr int R = DomainType::order;
     typedef E OperatorType;   // differential operator in its strong-formulation
     static_assert(
       std::is_base_of<DifferentialExpr<OperatorType>, OperatorType>::value, "E is not a valid differential operator");
@@ -74,19 +74,25 @@ class PDE : public PDEBase {
 
     // minimal constructor, use below setters to complete the construction of a PDE object
     PDE(const D& domain) : domain_(domain) { }
+    PDE(const D& domain, const DVector<double>& time) : domain_(domain), time_(time) { };
     PDE(const D& domain, E diff_op) : domain_(domain), diff_op_(diff_op) { };
+    fdapde_enable_constructor_if(is_parabolic, E) PDE(const D& domain, const DVector<double>& time, E diff_op) :
+        domain_(domain), time_(time), diff_op_(diff_op) {};
     void set_forcing(const F& forcing_data) { forcing_data_ = forcing_data; }
     void set_differential_operator(E diff_op) { diff_op_ = diff_op; }
     // full constructors
     PDE(const D& domain, E diff_op, const F& forcing_data) :
         domain_(domain), diff_op_(diff_op), forcing_data_(forcing_data) { }
-
+    fdapde_enable_constructor_if(is_parabolic, E)
+      PDE(const D& domain, const DVector<double>& time, E diff_op, const F& forcing_data) :
+        domain_(domain), time_(time), diff_op_(diff_op), forcing_data_(forcing_data) { }
     // setters
     virtual void set_dirichlet_bc(const DMatrix<double>& data) { boundary_data_ = data; }
     virtual void set_initial_condition(const DVector<double>& data) { initial_condition_ = data; };
 
     // getters
     const DomainType& domain() const { return domain_; }
+    const DVector<double>& time() const {return time_;}
     OperatorType differential_operator() const { return diff_op_; }
     const ForcingType& forcing_data() const { return forcing_data_; }
     const DVector<double>& initial_condition() const { return initial_condition_; }
@@ -94,14 +100,14 @@ class PDE : public PDEBase {
     const QuadratureRule& integrator() const { return solver_.integrator(); }
     const FunctionSpace& reference_basis() const { return solver_.reference_basis(); }
     const FunctionBasis& basis() const { return solver_.basis(); }
-    virtual DMatrix<double> dof_coords() { return solver_.dofs_coords(domain_); }
+    std::size_t n_dofs() const { return solver_.n_dofs(); }
   
-
-  // pde_ptr accessible interface
+    // pde_ptr accessible interface
     virtual const DMatrix<double>& solution() const { return solver_.solution(); };   // PDE solution
     virtual const DMatrix<double>& force() const { return solver_.force(); };         // rhs of discrete linear system
     virtual const SpMatrix<double>& R1() const { return solver_.R1(); };              // stiff matrix
     virtual const SpMatrix<double>& R0() const { return solver_.R0(); };              // mass matrix
+    virtual DMatrix<double> dof_coords() { return solver_.dofs_coords(domain_); }
     virtual DMatrix<double> quadrature_nodes() const { return integrator().quadrature_nodes(domain_); };
     virtual void init() { solver_.init(*this); };   // initializes the solver
     virtual void solve() {                          // solves the PDE
@@ -111,6 +117,7 @@ class PDE : public PDEBase {
 
    private:
     const DomainType& domain_;               // triangulated problem domain
+    const DVector<double> time_;
     OperatorType diff_op_;                   // differential operator in its strong formulation
     ForcingType forcing_data_;               // forcing data
     DVector<double> initial_condition_ {};   // initial condition, (for space-time problems only)

@@ -19,9 +19,10 @@
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 
-// fields
+// utils
 #include "src/scalar_field_test.cpp"
 #include "src/vector_field_test.cpp"
+#include "src/type_erasure_test.cpp"
 // mesh
 #include "src/element_test.cpp"
 #include "src/mesh_test.cpp"
@@ -29,7 +30,7 @@
 // linear_algebra
 #include "src/kronecker_product_test.cpp"
 #include "src/vector_space_test.cpp"
-// // finite_elements
+// finite_elements
 #include "src/fem_operators_test.cpp"
 #include "src/fem_pde_test.cpp"
 #include "src/integration_test.cpp"
