@@ -18,6 +18,7 @@
 
 #include <fdaPDE/utils.h>
 #include <fdaPDE/isogeometric_analysis.h>
+#include <unsupported/Eigen/SparseExtra>
 using fdapde::core::integrate_2D;
 using fdapde::core::IntegratorTable;
 using fdapde::core::GaussLegendre;
@@ -43,7 +44,7 @@ TEST(isogeometric_analysis_test, integrate_linear) {
     EXPECT_TRUE(almost_equal(3.0, integrate_2D(0, 1, 0, 2, f, table)));
 }
 
-// test if linear fields can be integrated over quads
+// test if cubic fields can be integrated over quads
 TEST(isogeometric_analysis_test, integrate_cubic) {
     IntegratorTable<2,4,GaussLegendre> table; // define table
     // integrate the function x^3+y^3+x^2y
@@ -52,22 +53,31 @@ TEST(isogeometric_analysis_test, integrate_cubic) {
     EXPECT_TRUE(almost_equal(31.0/6.0, integrate_2D(0, 1, 0, 2, f, table)));
 }
 
-// test 1D nurbs basis (functions are accessibile and callable)
+// test 1D nurbs basis (functions compute the correct value)
 TEST(isogeometric_analysis_test, nurbs_basis_1D) {
     DVector<double> nodes;
     DVector<double> weights;
-    nodes.resize(3);
-    weights.resize(5);
-    // uniform weight vector
-    for(size_t i = 0; i < 5; i++)weights(i)=1.;
+    nodes.resize(5);
+    weights.resize(7);
+    
     // open uniform knot vector
-    for(size_t i = 0; i < 3; i++)nodes(i)=1.*i;
+    for(size_t i = 0; i < 5; i++)nodes(i)=1.*i;
+    // easily replicable, non trivial weights
+    for(size_t i = 0; i < 7; i++)weights(i)=std::abs(std::sin(i+1));
 
-    NurbsBasis<1, 2> basis(nodes, weights);
-    for(size_t i = 0; i < basis.size(); i++){
-        // check that each element can be called correctly
-        basis[i](SVector<1>(0));
+    SpMatrix<double> expected;
+    // expected results from nurbs pointwise evaluations
+    Eigen::loadMarket(expected, "../data/mtx/nurbs_test_1.mtx");
+
+    NurbsBasis<1, 3> basis(nodes, weights);
+
+    for(size_t i = 0; i < basis.size(); ++i){
+        for(size_t j = 0; j < expected.cols(); ++j){
+            // compare values with data from file
+            EXPECT_TRUE(almost_equal(expected.coeff(i+1,j),basis[i](SVector<1>(expected.coeff(0,j)))));
+        }
     }
+
 }
 
 // test 2D nurbs basis (functions are accessibile and callable)
