@@ -82,18 +82,29 @@ TEST(isogeometric_analysis_test, nurbs_basis_1D) {
 
 // test 2D nurbs basis (functions are accessibile and callable)
 TEST(isogeometric_analysis_test, nurbs_basis_2D) {
-    DVector<double> nodes;
+    DVector<double> nodes_x;
+    DVector<double> nodes_y;
     DMatrix<double> weights;
-    nodes.resize(3);
-    weights.resize(5,5);
-    // uniform weight vector
-    for(size_t i = 0; i < 5; i++)for(size_t j = 0; j < 5; j++)weights(i,j)=1.;
+    nodes_x.resize(2);
+    nodes_y.resize(3);
+    weights.resize(4,5);
+    // easily replicable, non trivial weights
+    for(size_t i = 0; i < 4; i++)for(size_t j = 0; j < 5; j++)weights(i,j)=std::abs(std::sin(i+1))*std::abs(std::cos(j+1));
     // open uniform knot vector
-    for(size_t i = 0; i < 3; i++)nodes(i)=1.*i;
-    NurbsBasis<2, 2> basis(nodes, weights);
-    for(size_t i = 0; i < basis.size(); i++){
-        // check that each element can be called correctly
-        basis[i](SVector<2>(0,0));
+    for(size_t i = 0; i < 2; i++)nodes_x(i)=1.*i;
+    for(size_t i = 0; i < 3; i++)nodes_y(i)=1.*i;
+
+    SpMatrix<double> expected;
+    // expected results from nurbs pointwise evaluations
+    Eigen::loadMarket(expected, "../data/mtx/nurbs_test_2.mtx");
+
+    NurbsBasis<2, 3> basis(nodes_x, nodes_y, weights);
+    
+    for(size_t i = 0; i < basis.size(); ++i){
+        for(size_t j = 0; j < expected.cols(); ++j){
+            // compare values with data from file
+            EXPECT_TRUE(almost_equal(expected.coeff(i+2,j),basis[i](SVector<2>(expected.coeff(0,j), expected.coeff(1,j)))));
+        }
     }
 }
 
