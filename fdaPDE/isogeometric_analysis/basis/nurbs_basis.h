@@ -26,8 +26,87 @@ namespace core{
 
 // forward declaration of template class, to be specialized for each value of M
 // R = nurbs order;     M = embedding dimension
-template <int M, int R> class NurbsBasis;
 
+template <int M, int R> class NurbsBasis {
+    private:
+        SVector<M,DVector<double>> knots_;
+        Tensor<double,M> weights_; // tensor of weights
+        std::vector<Nurbs<M,R>> basis_; 
+    public:
+        using const_iterator = typename std::vector<Nurbs<M,R>>::const_iterator;
+        static constexpr std::size_t order = R;
+        typedef Nurbs<M,R> ElementType;
+
+        // constructor
+        NurbsBasis() = default;
+        NurbsBasis(const DVector<double>& knots, const Tensor<double,M>& weights) : NurbsBasis(SVector<M,DVector<double>>(knots), weights) {};
+        NurbsBasis(const SVector<M,DVector<double>>& knots, const Tensor<double,M>& weights) : knots_(knots),weights_(weights) {
+            // reserve space
+            std::size_t n;
+            // pad the knot vector to obtain a full basis for the whole knot span [u_0, u_n]
+            for(std::size_t i=0; i < M; ++i){
+                // reserve space
+                n=knots_[i].size();
+                knots_[i].resize(n + 2 * R);
+                for (std::size_t j = 0; j < n + 2 * R; ++j) {
+                if (j < R) {
+                    knots_[i][j] = knots_[i][0];
+                } else {
+                    if (j < n + R) {
+                        knots_[i][j] = knots_[i][j - R];
+                    } else {
+                        knots_[i][j] = knots_[i][n - 1];
+                    }
+                }
+            }
+            }
+            // reserve space  
+            n=0;
+            for(std::size_t i=0; i< M;++i){
+                n=n*(knots_[i].size()-R-1); // tensor product dim = product of dims
+            }
+            basis_.reserve(n); 
+
+            // fill the basis
+            SVector<M,std::size_t> index;
+            for(std::size_t i = 0; i < n; ++i){
+                // compute NURBS basis, knots and weights are always the same, index changes every loop
+                basis_.emplace_back(knots_, weights_, index);
+
+                // insertion is done according to lexicographical ordering
+                std::size_t j = M-1;
+                // increment the last index
+                ++index[j];
+                // when a "row" is finished, carry the increment over to the previous index 
+                while(j>0 && index[j] == size(j)){
+                    index[j] = 0;
+                    --j;
+                    ++index[j];
+                }
+            }
+            
+        }
+
+        // getters
+        const Nurbs<M,R>& operator[](std::size_t i) const { return basis_[i]; }
+        const Nurbs<M,R>& operator()(const SVector<M,std::size_t> & index) const { 
+            std::size_t idx=0;
+            for(std::size_t i = 0; i < M; ++i){
+                idx = size(i) * idx + index[i];
+            }
+            return basis_[idx];
+        }
+        int size() const { return basis_.size(); }
+        int size(std::size_t i) const { return knots_[i].size() - R - 1;}
+        const SVector<M,DVector<double>>& knots() const {return knots_;}
+        const DVector<double>& knots(std::size_t i) const { return knots_[i]; }
+        const Tensor<double,M>& weights() const { return weights_; }
+
+        // iterators
+        const_iterator begin() const { return basis_.cbegin(); }
+        const_iterator end() const { return basis_.cend(); }
+};
+/*
 // 1D NURBS basis
 template <int R> class NurbsBasis<1, R> {
     private:
@@ -144,7 +223,7 @@ template <int R> class NurbsBasis<2, R> {
         const_iterator begin() const { return basis_.cbegin(); }
         const_iterator end() const { return basis_.cend(); }
 };
-
+*/
 }   // namespace core
 }   // namespace fdapde
 
