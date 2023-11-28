@@ -20,6 +20,7 @@
 #include "../../splines/basis/spline.h"
 #include "../../fields/scalar_field.h"
 #include "../../fields/scalar_expressions.h"
+#include <unsupported/Eigen/CXX11/Tensor>
 
 namespace fdapde{
 namespace core{
@@ -28,63 +29,54 @@ namespace core{
 // Define the splines basis N = [N_0p, ..., N_np] starting from this knot vector.
 // Let w_0, ..., w_n be some positive weights
 // Define the NURBS basis as R
-// R_ip(x) =  [w_i/[\sum_{j} (w_j*N_jp(x))]]*N_ip(x)
+// R_ip(x) =  [w_i/[\sum_{j} (w_j*N_jp(x))]]*N_ip(x) 
 
-// forward declaration of template class, to be specialized for each value of M
-// R = nurbs order;     M = embedding dimension
-template <int M, int R> class Nurbs;
+// R = nurbs order;     M = embedding dimension;
+using Eigen::Tensor;
 
-// A 1D NURBS of order R centered in knot u_i.
-template <int R> class Nurbs<1, R> : public ScalarExpr<1, Nurbs<1, R>>{
-    private:
-     DVector<double> knots_ {};   // vector of knots
-     DVector<double> weights_ {};   // vector of weights
-     std::size_t i_;     // knot index where this basis is centered
-
-    public:
-     // constructor
-     Nurbs() = default;
-     Nurbs(const DVector<double>& knots, const DVector<double>& weights, std::size_t i) : knots_(knots), weights_(weights), i_(i) {};
-
-    // evaluates the NURBS at a given point 
-     inline double operator()(SVector<1> x) const {
-        double den=0.;
-        // compute the sum that appears at the denominator of the formula
-        for(std::size_t j=0;j<knots_.rows() - R - 1;j++){
-            den += weights_[j]*Spline<R>(knots_, j)(x);
-        }
-        return (weights_[i_]/den) * Spline<R>(knots_, i_)(x);
-    }
-
+template <int N, int J>
+inline auto multicontract(const Tensor<double,N-J>& weights,const SVector<N,Tensor<double,1>>& part){
+    if constexpr (N==J)
+        return weights;//end of recursion
+    else 
+        return multicontract<N,J+1>(weights.contract(part[J],Eigen::array<Eigen::IndexPair<int>,1>{}),part);
 };
 
-// A 2D NURBS of order R centered in knot (u_i, v_j)
-template <int R> class Nurbs<2, R> : public ScalarExpr<2, Nurbs<2, R>>{
+template <int M, int R> class Nurbs : public ScalarExpr<M,Nurbs<M,R>>{
     private:
-     DVector<double> knots_x_ {};   // vector of knots 1st coordinate
-     DVector<double> knots_y_ {};   // vector of knots 2nd coordinate
-     DMatrix<double> weights_ {};   // vector of weights
-     std::size_t i_;     // 1st knot index
-     std::size_t j_;     // 2nd knot index
+     SVector<M,DVector<double>> knots_; // vector of vector of knots
+     Tensor<double,M> weights_; // tensor of weights
+     SVector<M,std::size_t> index_; // knots indexes where this basis is centered
 
     public:
-     // constructor
+    // constructor
      Nurbs() = default;
-     Nurbs(const DVector<double>& knots_x, const DVector<double>& knots_y, const DMatrix<double>& weights, std::size_t i, std::size_t j) : knots_x_(knots_x), knots_y_(knots_y), weights_(weights), i_(i), j_(j) {};
-     Nurbs(const DVector<double>& knots, const DMatrix<double>& weights, std::size_t i, std::size_t j) : Nurbs(knots, knots, weights, i, j) {};
+     Nurbs(const SVector<M,DVector<double>>& knots,const Tensor<double,M>& weights,const SVector<M,std::size_t>& index) : knots_(knots), 
+     weights_(weights), index_(index) {};
+     Nurbs(const DVector<double>& knots, const Tensor<double,M>& weights, const SVector<M,std::size_t>& index) : 
+     Nurbs(SVector<M,DVector<double>>(knots),weights,index) {};
 
-    // evaluates the NURBS at a given point 
-     inline double operator()(SVector<2> x) const {
-        double den=0.;
-        // compute the sum that appears at the denominator of the formula
-        for(std::size_t k=0;k<knots_x_.rows() - R - 1;k++){
-            for(std::size_t l=0;l<knots_y_.rows() - R - 1;l++){
-                den += weights_(k,l)*Spline<R>(knots_x_, k)(x.block<1,1>(0,0))*Spline<R>(knots_y_, l)(x.block<1,1>(1,0));
+    //evaluates the NURBS at a given point 
+     inline double operator()(const SVector<M>& x) const {
+        
+        double num=weights_(index_);
+        SVector<M,Tensor<double,1>> spline_evaluation;
+        //builds the M-dim SVector containing in each position the set of spline basis evaluated
+        for(std::size_t i=0;i<M;i++){
+            //resize i-th tensor according to i-th weights dimension
+            spline_evaluation[i].resize(weights_.dimension(i));
+            //numerator update
+            num=num*Spline<R>(knots_[i], index_[i])(SVector<1>(x[i]));
+            //spline evaluation for i-th dimension
+            for(std::size_t j=0; j<weights_.dimension(i); j++){
+                spline_evaluation[i](j)=Spline<R>(knots_[i], j)(SVector<1>(x[i]));
             }
         }
-        return (weights_(i_,j_)/den) * Spline<R>(knots_x_, i_)(x.block<1,1>(0,0)) * Spline<R>(knots_y_, j_)(x.block<1,1>(1,0));
-    }
-
+        // compute the sum that appears at the denominator of the formula
+        Eigen::TensorFixedSize<double, Eigen::Sizes<>> den= multicontract<M,0>(weights_,spline_evaluation);
+        return num/den(0);
+    };
+    
 };
 
 } // namespace core
