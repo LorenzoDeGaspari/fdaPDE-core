@@ -67,9 +67,9 @@ TEST(isogeometric_analysis_test, nurbs_basis_1D) {
     SpMatrix<double> expected;
     // expected results from nurbs pointwise evaluations
     Eigen::loadMarket(expected, "../data/mtx/nurbs_test_1.mtx");
-
+    
     NurbsBasis<1, 3> basis(nodes, weights);
-
+    
     for(size_t i = 0; i < basis.size(); ++i){
         for(size_t j = 0; j < expected.cols(); ++j){
             // compare values with data from file
@@ -103,6 +103,119 @@ TEST(isogeometric_analysis_test, nurbs_basis_2D) {
         for(size_t j = 0; j < expected.cols(); ++j){
             // compare values with data from file
             EXPECT_TRUE(almost_equal(expected.coeff(i+2,j),basis[i](SVector<2>(expected.coeff(0,j), expected.coeff(1,j)))));
+        }
+    }
+}
+
+
+// test 1D nurbs basis derivative (functions compute the correct value)
+TEST(isogeometric_analysis_test, nurbs_basis_derivative_1D){
+    DVector<double> nodes;
+    Eigen::Tensor<double,1> weights(7);
+    nodes.resize(5);
+    
+    // open uniform knot vector
+    for(size_t i = 0; i < 5; i++)nodes(i)=1.*i;
+    // easily replicable, non trivial weights
+    for(size_t i = 0; i < 7; i++)weights(i)=std::abs(std::sin(i+1));
+
+    SpMatrix<double> expected;
+    // expected results from nurbs derivative pointwise evaluations
+    Eigen::loadMarket(expected, "../data/mtx/nurbs_test_3.mtx");
+
+    NurbsBasis<1, 3> basis(nodes, weights);
+    
+    for(size_t i = 0; i < basis.size(); ++i){
+        for(size_t j = 0; j < expected.cols(); ++j){
+            // compare values with data from file
+            EXPECT_TRUE(almost_equal(expected.coeff(i+1,j),basis[i].derive()[0](SVector<1>(expected.coeff(0,j)))));
+        }
+    }
+}
+
+
+// test 2D nurbs basis derivative (functions are accessibile and callable)
+TEST(isogeometric_analysis_test, nurbs_basis_derivative_2D) {
+    SVector<2,DVector<double>> nodes;
+    Eigen::Tensor<double,2> weights(4,5);
+    nodes[0].resize(2);
+    nodes[1].resize(3);
+
+    // open uniform knot vector
+    for(size_t i = 0; i < 2; i++)nodes[0](i)=1.*i;
+    for(size_t i = 0; i < 3; i++)nodes[1](i)=1.*i;
+    // easily replicable, non trivial weights
+    for(size_t i = 0; i < 4; i++)for(size_t j = 0; j < 5; j++)weights(i,j)=std::abs(std::sin(i+1))*std::abs(std::cos(j+1));
+    
+
+    SpMatrix<double> expected;
+    // expected results from nurbs derivative pointwise evaluations
+    Eigen::loadMarket(expected, "../data/mtx/nurbs_test_4.mtx");
+
+    NurbsBasis<2, 3> basis(nodes, weights);
+    
+    for(size_t i = 0; i < basis.size(); ++i){
+        for(size_t j = 0; j < expected.cols(); ++j){
+            // compare values with data from file
+            EXPECT_TRUE(almost_equal(expected.coeff(2*i+2,j),basis[i].derive()[0](SVector<2>(expected.coeff(0,j), expected.coeff(1,j)))));
+            EXPECT_TRUE(almost_equal(expected.coeff(2*i+3,j),basis[i].derive()[1](SVector<2>(expected.coeff(0,j), expected.coeff(1,j)))));
+        }
+    }
+}
+
+// test 1D nurbs basis second derivative (functions compute the correct value)
+TEST(isogeometric_analysis_test, nurbs_basis_second_derivative_1D){
+    DVector<double> nodes;
+    Eigen::Tensor<double,1> weights(7);
+    nodes.resize(5);
+    
+    // open uniform knot vector
+    for(size_t i = 0; i < 5; i++)nodes(i)=1.*i;
+    // easily replicable, non trivial weights
+    for(size_t i = 0; i < 7; i++)weights(i)=std::abs(std::sin(i+1));
+
+    SpMatrix<double> expected;
+    // expected results from nurbs derivative pointwise evaluations
+    Eigen::loadMarket(expected, "../data/mtx/nurbs_test_5.mtx");
+
+    NurbsBasis<1, 3> basis(nodes, weights);
+    
+    for(size_t i = 0; i < basis.size(); ++i){
+        for(size_t j = 0; j < expected.cols(); ++j){
+            // compare values with data from file
+            EXPECT_TRUE(almost_equal(expected.coeff(i+1,j),basis[i].deriveTwice()(0,0)(SVector<1>(expected.coeff(0,j)))));
+        }
+    }
+}
+
+
+// test 2D nurbs basis second derivative (functions are accessibile and callable)
+TEST(isogeometric_analysis_test, nurbs_basis_second_derivative_2D) {
+    SVector<2,DVector<double>> nodes;
+    Eigen::Tensor<double,2> weights(4,5);
+    nodes[0].resize(2);
+    nodes[1].resize(3);
+
+    // open uniform knot vector
+    for(size_t i = 0; i < 2; i++)nodes[0](i)=1.*i;
+    for(size_t i = 0; i < 3; i++)nodes[1](i)=1.*i;
+    // easily replicable, non trivial weights
+    for(size_t i = 0; i < 4; i++)for(size_t j = 0; j < 5; j++)weights(i,j)=std::abs(std::sin(i+1))*std::abs(std::cos(j+1));
+    
+
+    SpMatrix<double> expected;
+    // expected results from nurbs derivative pointwise evaluations
+    Eigen::loadMarket(expected, "../data/mtx/nurbs_test_6.mtx");
+
+    NurbsBasis<2, 3> basis(nodes, weights);
+    
+    for(size_t i = 0; i < basis.size(); ++i){
+        for(size_t j = 0; j < expected.cols(); ++j){
+            // compare values with data from file
+            EXPECT_TRUE(almost_equal(expected.coeff(4*i+2,j),basis[i].deriveTwice()(0,0)(SVector<2>(expected.coeff(0,j), expected.coeff(1,j)))));
+            EXPECT_TRUE(almost_equal(expected.coeff(4*i+3,j),basis[i].deriveTwice()(1,0)(SVector<2>(expected.coeff(0,j), expected.coeff(1,j)))));
+            EXPECT_TRUE(almost_equal(expected.coeff(4*i+4,j),basis[i].deriveTwice()(0,1)(SVector<2>(expected.coeff(0,j), expected.coeff(1,j)))));
+            EXPECT_TRUE(almost_equal(expected.coeff(4*i+5,j),basis[i].deriveTwice()(1,1)(SVector<2>(expected.coeff(0,j), expected.coeff(1,j)))));
         }
     }
 }
