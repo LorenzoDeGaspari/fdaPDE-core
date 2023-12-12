@@ -38,11 +38,21 @@ namespace core{
 // R = nurbs order;     M = embedding dimension;
 using Eigen::Tensor;
 
+/*
+    This function can be used to compute the contraction product between a tensor of order N
+    and N different vectors, each of length equal to the corresponding size value of the tensor.
+    For instance, if N = 2 the result will be equal to
+    sum(i,j) w[i,j] * v1[i] * v2[j]
+
+    The template parameter J is used to recall at which level of recursion we are
+    External calls should be made only with J = 0
+*/
 template <int N, int J>
-inline auto multicontract(const Tensor<double,N-J>& weights,const SVector<N,Tensor<double,1>>& part){
+inline double multicontract(const Tensor<double,N-J>& weights,const SVector<N,Tensor<double,1>>& part){
     if constexpr (N==J)
         return weights(0);//end of recursion
     else
+        // Eigen::Tensor::contract computes the tensor of order (N-J)-1 where one index is lost due to summation
         return multicontract<N,J+1>(weights.contract(part[J],Eigen::array<Eigen::IndexPair<int>,1>{}),part);
 };
 
