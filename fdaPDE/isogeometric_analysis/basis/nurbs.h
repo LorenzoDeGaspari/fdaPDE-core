@@ -282,6 +282,7 @@ template <int M, int R> class Nurbs : public ScalarExpr<M,Nurbs<M,R>>{
     //getters
      VectorField<M, M, NurbsDerivative<M, R>> derive () const{return gradient_;};
      MatrixField<M,M,M,NurbsSecondDerivative<M,R>> deriveTwice() const{return hessian_;}
+     const SVector<M,std::size_t> & index() const { return index_; };
     
 };
 
