@@ -24,7 +24,7 @@ using fdapde::core::IntegratorTable;
 using fdapde::core::GaussLegendre;
 using fdapde::core::Nurbs;
 using fdapde::core::NurbsBasis;
-using fdapde::core::NurbsSurface;
+using fdapde::core::MeshIga;
 
 // tests if the integration of the constant field 1 over a quad equals its measure
 TEST(isogeometric_analysis_test, integrate_constant) {
@@ -220,30 +220,51 @@ TEST(isogeometric_analysis_test, nurbs_basis_second_derivative_2D) {
     }
 }
 
-/*
-// test manifold mesh constructor
-TEST(isogeometric_analysis_test, nurbs_mesh) {
-    DVector<double> nodes;
-    DMatrix<double> weights;
-    DMatrix<DVector<double>> control_points;
-    nodes.resize(3);
-    weights.resize(5,5);
-    control_points.resize(3,3);
-    // control points for a step shape domain in 3D
-    for(size_t i = 0; i < 3; i++)for(size_t j = 0; j < 3; j++){
-        control_points(i,j).resize(3);
-        control_points(i,j)=SVector<3>(i>=1?1:0,j-1,i>=2 ?1:0);
-    }
-    // uniform weight vector
-    for(size_t i = 0; i < 5; i++)for(size_t j = 0; j < 5; j++)weights(i,j)=1.;
-    // open uniform knot vector
-    for(size_t i = 0; i < 3; i++)nodes(i)=1.*i;
+TEST(isogeometric_analysis_test, mesh_parametrization){
 
-    NurbsSurface<2, 3, 2> step(nodes, weights, control_points);
-    for(size_t i = 0; i < step.n_nurbs(); i++){
-        // check that each element can be called correctly
-        step.nurbs(i)(SVector<2>(0,0));
+    SVector<3,DVector<double>> nodes;
+    Eigen::Tensor<double,3> weights(2,3,2);
+    Eigen::Tensor<double,4> controlpoints(2,3,2,3);
+    nodes[0].resize(2);
+    nodes[1].resize(3);
+    nodes[2].resize(2);
+
+    for(size_t i = 0; i < 2; i++)nodes[0](i)=1.*i;
+    for(size_t i = 0; i < 3; i++)nodes[1](i)=0.5*i;
+    for(size_t i = 0; i < 2; i++)nodes[2](i)=1.*i;
+
+    for(size_t i = 0; i < 2; i++)
+        for(size_t j = 0; j < 3; j++)
+            for(size_t k = 0; k < 2; k++)
+                weights(i,j,k) = 1.;
+    
+    for(size_t i = 0; i < 3; i++){
+        for(size_t j = 0; j < 2; j++){
+            controlpoints(0,i,j,0) = (i<2)?-1.:1.;
+            controlpoints(0,i,j,1) = (i<1)?-1.:1.;
+            controlpoints(0,i,j,2) = (j<1)? 0.:1.;
+            controlpoints(1,i,j,0) = (i<2)? 0.:1.;
+            controlpoints(1,i,j,1) = (i<1)?-1.:0.;
+            controlpoints(1,i,j,2) = (j<1)? 0.:1.;
+        }
     }
-    //step.parametrization()(SVector<2>(0,0));
+
+    SpMatrix<double> expected;
+    // expected results from nurbs derivative pointwise evaluations
+    Eigen::loadMarket(expected, "../data/mtx/nurbs_mesh_test.mtx");
+
+    
+    MeshIga<3,3,1> msh(nodes, weights, controlpoints);
+
+    for(size_t j = 0; j < expected.cols(); ++j){
+        // first three rows of expected contain the x-y-z coordinates of the point at which to evaluate
+        SVector<3> x(expected.coeff(0,j),expected.coeff(1,j),expected.coeff(2,j));
+        for(size_t i = 0; i < 3; ++i){
+            EXPECT_TRUE(almost_equal(expected.coeff(3+i,j),msh.parametrization()[i](x)));
+            for(size_t k = 0; k < 3; ++k){
+                EXPECT_TRUE(almost_equal(expected.coeff(6+3*i+k,j),msh.gradient()(k,i)(x)));
+            }
+        }
+    }
+
 }
-*/
