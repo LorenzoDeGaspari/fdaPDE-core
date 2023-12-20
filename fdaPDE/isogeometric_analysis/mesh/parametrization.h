@@ -37,7 +37,7 @@ class ParametrizationDerivative : MatrixExpr<M,N,M,ParametrizationDerivative<M,N
         ParametrizationDerivative() = default;
         // we only save the i-th component of the control points, so it is sufficient to chip the original ones
         ParametrizationDerivative(const SVector<M,DVector<double>>& knots,const Tensor<double,M>& weights, const Tensor<double,M+1>& control_points, std::size_t i, std::size_t j)
-         : ParametrizationDerivative(knots, weights, control_points.chip(M,i), j){ };
+         : ParametrizationDerivative(knots, weights, control_points.chip(i,M), j){ };
         ParametrizationDerivative(const SVector<M,DVector<double>>& knots,const Tensor<double,M>& weights, const Tensor<double,M>& control_points, std::size_t j)
          : basis_(knots, weights), control_points_(control_points), j_(j) { };
 
@@ -45,7 +45,7 @@ class ParametrizationDerivative : MatrixExpr<M,N,M,ParametrizationDerivative<M,N
             
             double res = 0.0;
             for(auto nurb : basis_){
-                res += nurb(x).derive()[j_] * control_points_(nurb.index());
+                res += nurb.derive()[j_](x) * control_points_(nurb.index());
             }
             return res;
 
@@ -65,7 +65,7 @@ class MeshParametrization : VectorExpr<M,N,MeshParametrization<M,N,R>>{
         MeshParametrization() = default;
         // we only save the i-th component of the control points, so it is sufficient to chip the original ones
         MeshParametrization(const SVector<M,DVector<double>>& knots,const Tensor<double,M>& weights, const Tensor<double,M+1>& control_points, std::size_t i)
-        : MeshParametrization(knots, weights, control_points.chip(M,i)) { };
+        : MeshParametrization(knots, weights, control_points.chip(i,M)) { };
         MeshParametrization(const SVector<M,DVector<double>>& knots,const Tensor<double,M>& weights, const Tensor<double,M>& control_points)
         : basis_(knots, weights), control_points_(control_points) { };
 
