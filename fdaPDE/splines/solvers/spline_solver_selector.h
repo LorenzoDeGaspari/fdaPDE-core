@@ -14,36 +14,24 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ifndef __NAIVE_SEARCH_H__
-#define __NAIVE_SEARCH_H__
+#ifndef __SPLINE_SOLVER_SELECTOR_H__
+#define __SPLINE_SOLVER_SELECTOR_H__
 
-#include <memory>
-
-#include "../element.h"
-#include "../mesh.h"
-#include "point_location_base.h"
+#include "../../utils/traits.h"
+#include "../spline_symbols.h"
+#include "spline_linear_elliptic_solver.h"
 
 namespace fdapde {
 namespace core {
 
-// naive search strategy for point location problem
-template <int M, int N> class NaiveSearch : public PointLocationBase<M, N> {
-   private:
-    const Mesh<M, N>& mesh_;
-   public:
-    NaiveSearch(const Mesh<M, N>& mesh) : mesh_(mesh) {};
-    // solves the point location problem
-    virtual const Element<M, N>* locate(const SVector<N>& p) const {
-        // loop over all mesh elements
-        for (const auto& element : mesh_) {
-            if (element.contains(p)) { return &element; }
-        }
-        // no element in mesh found
-        return nullptr;
-    }
+// selects solver type depending on properties of operator E, carries domain D and forcing F to solver
+template <typename D, typename E, typename F, typename... Ts> struct pde_solver_selector<SPLINE, D, E, F, Ts...> {
+    using type = typename switch_type<
+      switch_type_case<!is_parabolic<E>::value, SplineLinearEllipticSolver <D, E, F, Ts...>>
+      >::type;
 };
 
 }   // namespace core
 }   // namespace fdapde
 
-#endif   // __NAIVE_SEARCH_H__
+#endif   // __SPLINE_SOLVER_SELECTOR_H__

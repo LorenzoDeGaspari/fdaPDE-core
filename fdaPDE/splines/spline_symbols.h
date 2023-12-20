@@ -29,6 +29,11 @@ struct SPLINE { };
     auto psi_i = std::get<0>(mem_buff);                                                                                \
     auto psi_j = std::get<1>(mem_buff);
 
+// spline order type (just a type wrapper around an int)
+template <int R> struct spline_order {
+    static constexpr int value = R;
+};
+  
 }   // namespace core
 }   // namespace fdapde
 

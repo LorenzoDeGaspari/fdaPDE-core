@@ -23,8 +23,7 @@
 #include "../../utils/symbols.h"
 #include "../../utils/traits.h"
 #include "../../utils/combinatorics.h"
-#include "../basis/finite_element_basis.h"
-#include "../basis/lagrangian_element.h"
+#include "../basis/lagrangian_basis.h"
 #include "../fem_assembler.h"
 #include "../fem_symbols.h"
 #include "../operators/reaction.h"   // for mass-matrix computation
@@ -40,32 +39,29 @@ template <typename D, typename E, typename F, typename... Ts> class FEMSolverBas
    public:
     typedef std::tuple<Ts...> SolverArgs;
     enum {
-        fem_order = std::tuple_element <0, SolverArgs>::type::value,
+        fem_order = std::tuple_element<0, SolverArgs>::type::value,
         n_dof_per_element = ct_nnodes(D::local_dimension, fem_order),
         n_dof_per_edge = fem_order - 1,
         n_dof_internal =
           n_dof_per_element - (D::local_dimension + 1) - D::n_facets_per_element * (fem_order - 1)   // > 0 \iff R > 2
     };
-    typedef D DomainType;
-    typedef Integrator<DomainType::local_dimension, fem_order> QuadratureRule;
-    typedef LagrangianElement<DomainType::local_dimension, fem_order> FunctionSpace;
-    typedef FiniteElementBasis<FunctionSpace> FunctionBasis;
-
+    using DomainType = D;
+    using FunctionalBasis = LagrangianBasis<DomainType, fem_order>;
+    using ReferenceBasis = typename FunctionalBasis::ReferenceBasis;
+    using Quadrature = typename ReferenceBasis::Quadrature;
     // constructor
     FEMSolverBase() = default;
-
     // getters
     const DMatrix<double>& solution() const { return solution_; }
     const DMatrix<double>& force() const { return force_; }
-    const SpMatrix<double>& R1() const { return R1_; }
-    const SpMatrix<double>& R0() const { return R0_; }
-    const QuadratureRule& integrator() const { return integrator_; }
-    const FunctionSpace& reference_basis() const { return reference_basis; }
-    const FunctionBasis& basis() const { return fe_basis_; }
+    const SpMatrix<double>& stiff() const { return stiff_; }
+    const SpMatrix<double>& mass() const { return mass_; }
+    const Quadrature& integrator() const { return integrator_; }
+    const ReferenceBasis& reference_basis() const { return reference_basis_; }
+    const FunctionalBasis& basis() const { return basis_; }
     std::size_t n_dofs() const { return n_dofs_; }   // number of degrees of freedom (FEM linear system's unknowns)
     const DMatrix<int>& dofs() const { return dofs_; }
     DMatrix<double> dofs_coords(const DomainType& mesh);   // computes the physical coordinates of dofs
-
     // flags
     bool is_init = false;   // notified true if initialization occurred with no errors
     bool success = false;   // notified true if problem solved with no errors
@@ -96,13 +92,13 @@ template <typename D, typename E, typename F, typename... Ts> class FEMSolverBas
     boundary_dofs_iterator boundary_dofs_end() const { return boundary_dofs_iterator(this, n_dofs_); }
   
    protected:
-    QuadratureRule integrator_ {};       // default to a quadrature rule which is exact for the considered FEM order
-    FunctionSpace reference_basis_ {};   // function basis on the reference unit simplex
-    FunctionBasis fe_basis_ {};          // basis over the whole domain
-    DMatrix<double> solution_;           // vector of coefficients of the approximate solution
-    DMatrix<double> force_;              // discretized force [u]_i = \int_D f*\psi_i
-    SpMatrix<double> R1_;   // [R1_]_{ij} = a(\psi_i, \psi_j), being a(.,.) the bilinear form of the problem
-    SpMatrix<double> R0_;   // mass matrix, [R0_]_{ij} = \int_D (\psi_i * \psi_j)
+    Quadrature integrator_ {};            // default to a quadrature rule which is exact for the considered FEM order
+    FunctionalBasis basis_ {};            // basis system defined over the pyhisical domain
+    ReferenceBasis reference_basis_ {};   // function basis on the reference unit simplex
+    DMatrix<double> solution_;            // vector of coefficients of the approximate solution
+    DMatrix<double> force_;               // discretized force [u]_i = \int_D f*\psi_i
+    SpMatrix<double> stiff_;                 // [stiff_]_{ij} = a(\psi_i, \psi_j), being a(.,.) the bilinear form
+    SpMatrix<double> mass_;                 // mass matrix, [mass_]_{ij} = \int_D (\psi_i * \psi_j)
 
     std::size_t n_dofs_ = 0;        // degrees of freedom, i.e. the maximum ID in the dof_table_
     DMatrix<int> dofs_;             // for each element, the degrees of freedom associated to it
@@ -121,10 +117,11 @@ void FEMSolverBase<D, E, F, Ts...>::init(const PDE& pde) {
     static_assert(is_pde<PDE>::value, "not a valid PDE");
     // enumerate linear system unknowns
     enumerate_dofs(pde.domain());
+    basis_ = FunctionalBasis(pde.domain(), n_dofs_);
     // assemble discretization matrix for given operator    
-    Assembler<FEM, D, FunctionSpace, QuadratureRule> assembler(pde.domain(), integrator_, n_dofs_, dofs_);
-    R1_ = assembler.discretize_operator(pde.differential_operator());
-    R1_.makeCompressed();
+    Assembler<FEM, DomainType, ReferenceBasis, Quadrature> assembler(pde.domain(), integrator_, n_dofs_, dofs_);
+    stiff_ = assembler.discretize_operator(pde.differential_operator());
+    stiff_.makeCompressed();
     // assemble forcing vector
     std::size_t n = n_dofs_;   // degrees of freedom in space
     std::size_t m;             // number of time points
@@ -145,8 +142,8 @@ void FEMSolverBase<D, E, F, Ts...>::init(const PDE& pde) {
         force_.resize(n * m, 1);
         force_.block(0, 0, n, 1) = assembler.discretize_forcing(pde.forcing_data());
     }
-    // compute mass matrix [R0]_{ij} = \int_{\Omega} \phi_i \phi_j
-    R0_ = assembler.discretize_operator(Reaction<FEM, double>(1.0));
+    // compute mass matrix [mass]_{ij} = \int_{\Omega} \phi_i \phi_j
+    mass_ = assembler.discretize_operator(Reaction<FEM, double>(1.0));
     is_init = true;
     return;
 }
@@ -158,8 +155,8 @@ void FEMSolverBase<D, E, F, Ts...>::set_dirichlet_bc(const PDE& pde) {
     static_assert(is_pde<PDE>::value, "not a valid PDE");
     if (!is_init) throw std::runtime_error("solver must be initialized first!");
     for (auto it = boundary_dofs_begin(); it != boundary_dofs_end(); ++it) {
-      R1_.row(*it) *= 0;            // zero all entries of this row
-      R1_.coeffRef(*it, *it) = 1;   // set diagonal element to 1 to impose equation u_j = b_j
+      stiff_.row(*it) *= 0;            // zero all entries of this row
+      stiff_.coeffRef(*it, *it) = 1;   // set diagonal element to 1 to impose equation u_j = b_j
 	
       // TODO: currently only space-only case supported (reason of [0] below)
       force_.coeffRef(*it, 0) = pde.boundary_data()(*it, 0);   // impose boundary value on forcing term
@@ -167,59 +164,56 @@ void FEMSolverBase<D, E, F, Ts...>::set_dirichlet_bc(const PDE& pde) {
     return;
 }
   
-// builds a node enumeration for the support of a basis of order R. Specialization for 2D domains
+// builds a node enumeration for the support of a basis of order R. Specialization for 2D domains (check)
 template <typename D, typename E, typename F, typename... Ts>
 void FEMSolverBase<D, E, F, Ts...>::enumerate_dofs(const D& mesh) {
-  if(n_dofs_ != 0) return; // return early if dofs already computed
-  if constexpr (fem_order == 1) {
-    n_dofs_ = mesh.n_nodes();
-    dofs_ = mesh.elements();
-    boundary_dofs_ = mesh.boundary(); 
-  } else {
-    dofs_.resize(mesh.n_elements(), n_dof_per_element);
-    dofs_.leftCols(D::n_vertices) = mesh.elements(); // copy dofs associated to geometric vertices
+    if (n_dofs_ != 0) return;   // return early if dofs already computed
+    if constexpr (fem_order == 1) {
+      n_dofs_ = mesh.n_nodes();
+      dofs_ = mesh.elements();
+      boundary_dofs_ = mesh.boundary();
+    } else {
+      dofs_.resize(mesh.n_elements(), n_dof_per_element);
+      dofs_.leftCols(D::n_vertices) = mesh.elements();   // copy dofs associated to geometric vertices
 
-    int next = mesh.n_nodes();   // next valid ID to assign
-    auto edge_pattern = combinations<D::n_vertices_per_edge, D::n_vertices>();
-    std::set<int> boundary_set;
-    
-    // cycle over mesh edges
-    for(auto edge = mesh.facet_begin(); edge != mesh.facet_end(); ++edge) {
-      for(std::size_t i = 0; i < D::n_elements_per_facet; ++i) {
-	int element_id = (*edge).adjacent_elements()[i];
-	if(element_id >= 0) {
-	  // search for dof insertion point
-	  std::size_t j = 0;
-	  for(; j < edge_pattern.rows(); ++j) {
-	    std::array<int, D::n_vertices_per_edge> e {};
-	    for(std::size_t k = 0; k < D::n_vertices_per_edge; ++k) {
-	      e[k] = mesh.elements()(element_id, edge_pattern(j,k));
-	    }
-	    std::sort(e.begin(), e.end()); // normalize edge ordering
-	    if((*edge).node_ids() == e) break;
-	  }
-	  dofs_(element_id, D::n_vertices + j) = next;
-	  if((*edge).on_boundary()) boundary_set.insert(next);
+      int next = mesh.n_nodes();   // next valid ID to assign
+      auto edge_pattern = combinations<D::n_vertices_per_edge, D::n_vertices>();
+      std::set<int> boundary_set;
 
-	  // insert any internal dofs, if any (for cubic or higher order) + insert n_dof_per_edge dofs (for cubic or hiher)
-	}	
+      // cycle over mesh edges
+      for (auto edge = mesh.facet_begin(); edge != mesh.facet_end(); ++edge) {
+            for (std::size_t i = 0; i < D::n_elements_per_facet; ++i) {
+                int element_id = (*edge).adjacent_elements()[i];
+                if (element_id >= 0) {
+                    // search for dof insertion point
+                    std::size_t j = 0;
+                    for (; j < edge_pattern.rows(); ++j) {
+                        std::array<int, D::n_vertices_per_edge> e {};
+                        for (std::size_t k = 0; k < D::n_vertices_per_edge; ++k) {
+                            e[k] = mesh.elements()(element_id, edge_pattern(j, k));
+                        }
+                        std::sort(e.begin(), e.end());   // normalize edge ordering
+                        if ((*edge).node_ids() == e) break;
+                    }
+                    dofs_(element_id, D::n_vertices + j) = next;
+                    if ((*edge).on_boundary()) boundary_set.insert(next);
+
+                    // insert any internal dofs, if any (for cubic or higher order) + insert n_dof_per_edge dofs (for
+                    // cubic or higher)
+                }
+            }
+            next++;
       }
-      next++;
-    }
 
-    n_dofs_ = next;   // store number of unknowns
-    // update boundary
-    boundary_dofs_ = DMatrix<int>::Zero(n_dofs_, 1);
-    boundary_dofs_.topRows(mesh.boundary().rows()) = mesh.boundary();
-    for (auto it = boundary_set.begin(); it != boundary_set.end(); ++it) {
-        boundary_dofs_(*it, 0) = 1;
+      n_dofs_ = next;   // store number of unknowns
+      // update boundary
+      boundary_dofs_ = DMatrix<int>::Zero(n_dofs_, 1);
+      boundary_dofs_.topRows(mesh.boundary().rows()) = mesh.boundary();
+      for (auto it = boundary_set.begin(); it != boundary_set.end(); ++it) { boundary_dofs_(*it, 0) = 1; }
     }
-  }
-  return;
+    return;
 }
 
-
-  
 // produce the matrix of dof coordinates
 template <typename D, typename E, typename F, typename... Ts>
 DMatrix<double> FEMSolverBase<D, E, F, Ts...>::dofs_coords(const D& mesh) {
