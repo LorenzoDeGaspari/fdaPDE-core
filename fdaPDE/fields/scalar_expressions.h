@@ -34,18 +34,18 @@ struct ScalarBase { };
     }                                                                                                                  \
     template <int N, typename E>                                                                                       \
     ScalarBinOp<N, E, Scalar<N>, FUNCTOR> OPERATOR(const ScalarExpr<N, E>& op1, double op2) {                          \
-        return ScalarBinOp<N, E, Scalar<N>, FUNCTOR>(op1.get(), Scalar<N>(op2, op1.get().inner_size()), FUNCTOR());     \
+        return ScalarBinOp<N, E, Scalar<N>, FUNCTOR>(op1.get(), Scalar<N>(op2, op1.get().inner_size()), FUNCTOR());    \
     }                                                                                                                  \
     template <int N, typename E>                                                                                       \
     ScalarBinOp<N, Scalar<N>, E, FUNCTOR> OPERATOR(double op1, const ScalarExpr<N, E>& op2) {                          \
-        return ScalarBinOp<N, Scalar<N>, E, FUNCTOR>(Scalar<N>(op1, op2.get().inner_size()), op2.get(), FUNCTOR());     \
+        return ScalarBinOp<N, Scalar<N>, E, FUNCTOR>(Scalar<N>(op1, op2.get().inner_size()), op2.get(), FUNCTOR());    \
     }                                                                                                                  \
 // macro for the definition of unary operators on scalar fields
 #define DEFINE_SCALAR_UNARY_OPERATOR(OPERATOR, FUNCTION)                                                               \
     template <int N, typename E>                                                                                       \
     ScalarUnOp<N, E, std::function<double(double)>> OPERATOR(const ScalarExpr<N, E>& op1) {                            \
         std::function<double(double)> OPERATOR_ = [](double x) -> double { return FUNCTION(x); };                      \
-        return ScalarUnOp<N, E, std::function<double(double)>>(op1.get(), OPERATOR_, op1.get().inner_size());           \
+        return ScalarUnOp<N, E, std::function<double(double)>>(op1.get(), OPERATOR_, op1.get().inner_size());          \
     }
 
 // forward declaration
@@ -56,8 +56,8 @@ template <int N, typename E> class ScalarExprHessian;
 // Base class for scalar field expressions
 template <int N, typename E> class ScalarExpr : public ScalarBase {
    protected:
-    int dynamic_inner_size_;   // run-time base space dimension
-    double h_ = 1e-3;         // step size used in derivative approximation
+    int dynamic_inner_size_ = 0;   // run-time base space dimension
+    double h_ = 1e-3;              // step size used in derivative approximation
    public:
     typedef typename static_dynamic_vector_selector<N>::type VectorType;
     static constexpr int rows = 1;
@@ -94,13 +94,13 @@ template <int N> class Scalar : public ScalarExpr<N, Scalar<N>> {
 };
 
 // wraps an n_rows x 1 vector of data, acts as a double once forwarded the matrix row
-template <int N> class ScalarDataWrapper : public ScalarExpr<N, ScalarDataWrapper<N>> {
+template <int N> class DiscretizedScalarField : public ScalarExpr<N, DiscretizedScalarField<N>> {
    private:
     DMatrix<double, Eigen::RowMajor>* data_;
     double value_;
    public:
-    ScalarDataWrapper() = default;
-    ScalarDataWrapper(DMatrix<double, Eigen::RowMajor>& data) : data_(&data) {};
+    DiscretizedScalarField() = default;
+    DiscretizedScalarField(DMatrix<double, Eigen::RowMajor>& data) : data_(&data) {};
     double operator()(const SVector<N>& p) const { return value_; }
     void forward(Eigen::Index i) { value_ = data_->operator()(i, 0); }   // fix value_ to the i-th coefficient of data_
 };
@@ -119,7 +119,7 @@ class ScalarBinOp : public ScalarExpr<N, ScalarBinOp<N, OP1, OP2, BinaryOperatio
     // constructor
     ScalarBinOp(const OP1& op1, const OP2& op2, BinaryOperation f) :
         Base(op1.inner_size()), op1_(op1), op2_(op2), f_(f) {
-      if constexpr (N == Dynamic) { fdapde_assert(op1_.inner_size() == op2_.inner_size()); }
+        if constexpr (N == Dynamic) { fdapde_assert(op1_.inner_size() == op2_.inner_size()); }
     };
     double operator()(const typename Base::VectorType& p) const {
         if constexpr (N == Dynamic) { fdapde_assert(p.rows() == Base::inner_size()); }

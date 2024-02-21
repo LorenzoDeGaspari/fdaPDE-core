@@ -30,15 +30,15 @@ template <int N, int M = N, typename T = double> using SMatrix = Eigen::Matrix<T
 template <typename T, int Options_ = Eigen::ColMajor>
 using DMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic, Options_>;
 template <typename T> using DVector    = Eigen::Matrix<T, Eigen::Dynamic, 1>;
-template <typename T> using DiagMatrix = Eigen::DiagonalMatrix<double, Eigen::Dynamic, Eigen::Dynamic>;
+template <typename T> using DiagMatrix = Eigen::DiagonalMatrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 
 // sparse matrix structures
 template <typename T> using SpMatrix = Eigen::SparseMatrix<T>;
 
 namespace fdapde {
 
-const int Dynamic = -1;       // used when the size of a vector or matrix is not known at compile time
-const int random_seed = -1;   // signals that a random seed is used somewhere
+constexpr int Dynamic = -1;       // used when the size of a vector or matrix is not known at compile time
+constexpr int random_seed = -1;   // signals that a random seed is used somewhere
 
 template <int N, typename T = double> struct static_dynamic_vector_selector {
     using type = typename std::conditional<N == Dynamic, DVector<T>, SVector<N, T>>::type;
@@ -55,12 +55,6 @@ template <int N, int M, typename T = double> struct static_dynamic_matrix_select
 };
 template <int N, int M, typename T = double>
 using static_dynamic_matrix_selector_t = typename static_dynamic_matrix_selector<N, M, T>::type;
-
-namespace internal {
-// define symbols for storage type
-struct SparseStorage { };
-struct DenseStorage { };
-}   // namespace internal
   
 // a Triplet type (almost identical with respect to Eigen::Triplet<T>) but allowing for non-const access to stored value
 // this is compatible to Eigen::setFromTriplets() method used for the sparse matrix construction
@@ -136,6 +130,7 @@ template <typename T> class SparseLU {
    private:
     typedef Eigen::SparseLU<T, Eigen::COLAMDOrdering<int>> SparseLU_;
     std::shared_ptr<SparseLU_> solver_;   // wrap Eigen::SparseLU into a movable object
+    bool computed_ = false;               // asserted true if factorization is successfully computed
    public:
     // default constructor
     SparseLU() = default;
@@ -143,6 +138,7 @@ template <typename T> class SparseLU {
     void compute(const T& matrix) {
         solver_ = std::make_shared<SparseLU_>();
         solver_->compute(matrix);
+	if (solver_->info() == Eigen::Success) { computed_ = true; }  
     }
 
     template <typename Rhs>   // solve method, dense rhs operand
@@ -156,10 +152,11 @@ template <typename T> class SparseLU {
     // direct access to Eigen::SparseLU
     std::shared_ptr<SparseLU_> operator->() { return solver_; }
     Eigen::ComputationInfo info() const { return solver_->info(); }
+    operator bool() const { return computed_; }  
 };
 
 // test for floating point equality based on relative error.
-const double DOUBLE_TOLERANCE = 50 * std::numeric_limits<double>::epsilon();   // approx 10^-14
+constexpr double DOUBLE_TOLERANCE = 50 * std::numeric_limits<double>::epsilon();   // approx 10^-14
 template <typename T>
 typename std::enable_if<!std::numeric_limits<T>::is_integer, bool>::type almost_equal(T a, T b, T epsilon) {
     return std::fabs(a - b) < epsilon ||
@@ -172,6 +169,14 @@ template <typename T> typename std::enable_if<!std::numeric_limits<T>::is_intege
 
 // test if Eigen matrix is empty (a zero-sized matrix is considered empty)
 template <typename Derived> bool is_empty(const Eigen::EigenBase<Derived>& matrix) { return matrix.size() == 0; }
+
+// compute log(1 + exp(x)) in a numerical stable way (see Machler, M. (2012). Accurately computing log(1-exp(-|a|)))
+constexpr double log1pexp(double x) {
+    if (x <= -37.0) return std::exp(x);
+    if (x <=  18.0) return std::log1p(std::exp(x));
+    if (x >   33.3) return x;
+    return x + std::exp(-x);
+}
 
 }   // namespace fdapde
 

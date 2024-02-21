@@ -73,8 +73,9 @@ template <typename V> struct merge<V> {   // end of recursion
 template <typename T, auto FuncPtr, std::size_t... Is> auto load_method(std::index_sequence<Is...>) {
     using Signature = fn_ptr_traits<FuncPtr>;
     return static_cast<typename Signature::FnPtrType>(
-      [](void* obj, std::tuple_element_t<Is, typename Signature::ArgsType>... args) -> typename Signature::RetType {
-          return std::mem_fn(FuncPtr)(*reinterpret_cast<T*>(obj), args...);   // cast to pointer to T done here
+      [](void* obj, std::tuple_element_t<Is, typename Signature::ArgsType>&&... args) -> typename Signature::RetType {
+          return std::mem_fn(FuncPtr)(   // cast to pointer to T done here
+            *reinterpret_cast<T*>(obj), std::forward<std::tuple_element_t<Is, typename Signature::ArgsType>>(args)...);
       });
 }
 // recursively initializes virtual table
@@ -96,7 +97,6 @@ struct shared_storage {
     std::shared_ptr<void> ptr_ = nullptr;
     void* ptr() { return ptr_.get(); }
     const void* ptr() const { return ptr_.get(); }
-    operator bool() const { return ptr_ == nullptr; }
 
     shared_storage() = default;
     template <typename T> shared_storage(const T& obj) : ptr_(std::make_shared<T>(obj)) {};
@@ -106,7 +106,6 @@ struct non_owning_storage {
     const void* ptr_ = nullptr;
     void* ptr() { return const_cast<void*>(ptr_); }
     const void* ptr() const { return ptr_; }
-    operator bool() const { return ptr_ == nullptr; }
 
     non_owning_storage() = default;
     template <typename T> non_owning_storage(T& obj) : ptr_(&obj) {};
@@ -158,7 +157,6 @@ struct heap_storage {
     // getter to holded data
     void* ptr() { return ptr_; };
     const void* ptr() const { return ptr_; }
-    operator bool() const { return ptr_ != nullptr; }
   
     ~heap_storage() {
         // free memory and restore status
@@ -206,8 +204,10 @@ struct vtable_handler {
     ~vtable_handler() {
         if(vtable_) delete[] vtable_;
         vtable_ = nullptr;
+	size_ = 0;
     }
 
+    operator bool() const { return size_ != 0; }
     virtual void* __data() = 0;   // pointer to stored object
     virtual const void* __data() const = 0;
 };
@@ -240,9 +240,9 @@ template <typename StorageType, typename... I> class erase : vtable_handler, pub
       data_ = other.data_;
       return *this;
     }
-    erase(erase&& other) : vtable_handler(std::move(other)), data_(std::move(other.data_)) {}
+    erase(erase&& other) : vtable_handler(other), data_(std::move(other.data_)) {}
     erase& operator=(erase&& other) {
-      vtable_handler::operator=(std::move(other));
+      vtable_handler::operator=(other);
       data_ = std::move(other.data_);
       return *this;
     };
@@ -256,7 +256,7 @@ template <typename StorageType, typename... I> class erase : vtable_handler, pub
 
     virtual void* __data() override { return data_.ptr(); }
     virtual const void* __data() const override { return data_.ptr(); }
-    operator bool() const { return data_.operator bool(); }
+    operator bool() const { return vtable_handler::operator bool(); }
     
     virtual ~erase() = default;
    private:
@@ -264,12 +264,13 @@ template <typename StorageType, typename... I> class erase : vtable_handler, pub
 };
 
 // invoke function pointer (T is deduced to the type of the interface)
-template <typename RetType, int N, typename T, typename... Args> RetType invoke(const T& obj, Args... args) {
+template <typename RetType, int N, typename T, typename... Args> RetType invoke(T&& obj, Args&&... args) {
     auto& vtable = reinterpret_cast<const vtable_handler&>(obj);
     short offset = vtable.offset_table_.at(typeid(std::decay_t<T>)) + N;
-    return reinterpret_cast<RetType (*)(const void*, Args...)>(vtable.vtable_[offset])(vtable.__data(), args...);
+    return reinterpret_cast<RetType (*)(const void*, Args&&...)>(vtable.vtable_[offset])(
+      vtable.__data(), std::forward<Args>(args)...);
 }
-
+  
 // alias for function member pointers
 template <auto... Vs> using mem_fn_ptrs = ValueList<Vs...>;
   

@@ -25,10 +25,11 @@ namespace fdapde {
 namespace core {
 
 // implementation of the Broyden–Fletcher–Goldfarb–Shanno algorithm for unconstrained nonlinear optimization
-template <int N> class BFGS {
+template <int N, typename... Args> class BFGS {
    private:
     typedef typename std::conditional<N == Dynamic, DVector<double>, SVector<N>>::type VectorType;
     typedef typename std::conditional<N == Dynamic, DMatrix<double>, SMatrix<N>>::type MatrixType;
+    std::tuple<Args...> callbacks_ {};
     std::size_t max_iter_;   // maximum number of iterations before forced stop
     double tol_;             // tolerance on error before forced stop
     double step_;            // update step
@@ -42,12 +43,15 @@ template <int N> class BFGS {
 
     // constructor
     BFGS() = default;
+    template <int N_ = sizeof...(Args), typename std::enable_if<N_ != 0, int>::type = 0>
     BFGS(std::size_t max_iter, double tol, double step) : max_iter_(max_iter), tol_(tol), step_(step) {};
+    BFGS(std::size_t max_iter, double tol, double step, Args&... callbacks) :
+        max_iter_(max_iter), tol_(tol), step_(step), callbacks_(std::make_tuple(std::forward<Args>(callbacks)...)) {};
 
-    template <typename F, typename... Args> void optimize(F& objective, const VectorType& x0, Args... args) {
+    template <typename F> VectorType optimize(F& objective, const VectorType& x0) {
         static_assert(
           std::is_same<decltype(std::declval<F>().operator()(VectorType())), double>::value,
-          "cannot find definition for F.operator()(const VectorType&)");
+          "F_IS_NOT_A_FUNCTOR_ACCEPTING_A_VECTORTYPE");
 
         bool stop = false;   // asserted true in case of forced stop
         VectorType zero;     // either statically or dynamically allocated depending on N
@@ -72,7 +76,7 @@ template <int N> class BFGS {
         while (n_iter < max_iter_ && error > tol_ && !stop) {
             // compute update direction
             update = -inv_hessian * grad_old;
-            stop |= execute_pre_update_step(*this, objective, args...);
+            stop |= execute_pre_update_step(*this, objective, callbacks_);
 
             // update along descent direction
             x_new = x_old + h * update;
@@ -80,7 +84,7 @@ template <int N> class BFGS {
             if (grad_new.isApprox(zero)) {   // already at stationary point
                 optimum_ = x_old;
                 value_ = objective(optimum_);
-                return;
+                return optimum_;
             }
 
             // update inverse hessian approximation
@@ -95,7 +99,7 @@ template <int N> class BFGS {
 
             // prepare next iteration
             error = grad_new.norm();
-            stop |= execute_post_update_step(*this, objective, args...);
+            stop |= execute_post_update_step(*this, objective, callbacks_);
             x_old = x_new;
             grad_old = grad_new;
             n_iter++;
@@ -103,7 +107,7 @@ template <int N> class BFGS {
 
         optimum_ = x_old;
         value_ = objective(optimum_);
-        return;
+        return optimum_;
     }
 
     // getters

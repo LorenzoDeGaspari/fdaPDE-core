@@ -27,11 +27,14 @@ namespace core {
   
 template <typename D, typename E, typename F, typename... Ts>
 struct FEMLinearEllipticSolver : public FEMSolverBase<D, E, F, Ts...> {
+    using Base = FEMSolverBase<D, E, F, Ts...>;
+    FEMLinearEllipticSolver(const D& domain) : Base(domain){ }
+  
     // solves linear system stiff_*u = force_
     template <typename PDE> void solve(const PDE& pde) {
-        static_assert(is_pde<PDE>::value, "pde is not a valid PDE object");
+        fdapde_static_assert(is_pde<PDE>::value, THIS_METHOD_IS_FOR_PDE_ONLY);
         if (!this->is_init) throw std::runtime_error("solver must be initialized first!");
-        // define eigen system solver
+
         typedef Eigen::SparseLU<SpMatrix<double>, Eigen::COLAMDOrdering<int>> SystemSolverType;
         SystemSolverType solver;
         solver.compute(this->stiff_);

@@ -22,7 +22,7 @@
 // utils
 #include "src/scalar_field_test.cpp"
 #include "src/vector_field_test.cpp"
-// #include "src/matrix_field_test.cpp"
+#include "src/matrix_field_test.cpp"
 #include "src/type_erasure_test.cpp"
 // mesh
 #include "src/element_test.cpp"
@@ -31,6 +31,7 @@
 // linear_algebra
 #include "src/kronecker_product_test.cpp"
 #include "src/vector_space_test.cpp"
+#include "src/binary_matrix_test.cpp"
 // finite_elements
 #include "src/fem_operators_test.cpp"
 #include "src/fem_pde_test.cpp"
