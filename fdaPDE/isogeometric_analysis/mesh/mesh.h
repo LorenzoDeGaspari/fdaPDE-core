@@ -36,15 +36,24 @@ template <int M, int N, int R> class ElementIga {
     
     private:
 
+        using ParametrizationType = MeshParametrization<M,N,R>;
+        using GradientType = ParametrizationDerivative<M,N,R>;
+
         DVector<std::size_t> functions_; // indexes of the basis functions that have support in the element
         std::size_t ID_; // id of the element
-        std::shared_ptr<MeshParametrization<M,N,R>> parametrization_;
-        std::shared_ptr<ParametrizationDerivative<M,N,R>> gradient_;
+        std::shared_ptr<ParametrizationType> parametrization_;
+        std::shared_ptr<GradientType> gradient_;
 
     public:
 
         ElementIga() = default;
-        ElementIga(const DVector<std::size_t> & functions, std::size_t ID) : functions_(functions), ID_(ID) {}
+        ElementIga(const DVector<std::size_t> & functions, std::size_t ID, 
+        const ParametrizationType & parametrization, const GradientType & gradient) 
+        : functions_(functions), ID_(ID), parametrization_(std::make_shared<ParametrizationType>(parametrization)),
+        gradient_(std::make_shared<GradientType>(gradient))  {}
+        const VectorField<M, N, ParametrizationType>& parametrization() const { return *parametrization_; }
+        const MatrixField<M,N,M,GradientType>& gradient() const { return *gradient_; };
+
         std::size_t ID() const { return ID_; }
         const DVector<std::size_t> & functions() const { return functions_; }
         std::size_t n_functions() const { return functions_.rows(); }
@@ -53,7 +62,7 @@ template <int M, int N, int R> class ElementIga {
 
 };
 
-// M local space dimension, N embedding space dimension
+// N local space dimension, M embedding space dimension
 template <int M, int N, int R> class MeshIga{
 
     protected:
@@ -75,8 +84,8 @@ template <int M, int N, int R> class MeshIga{
         MeshIga() = default;
         MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<double,M>& weights, const Tensor<double,M+1>& control_points);
 
-        VectorField<M, N, MeshParametrization<N,M,R>> parametrization() const { return parametrization_; }
-        MatrixField<M,N,M,ParametrizationDerivative<M,N,R>> gradient() const { return gradient_; };
+        const VectorField<M, N, MeshParametrization<N,M,R>>& parametrization() const { return parametrization_; }
+        const MatrixField<M,N,M,ParametrizationDerivative<M,N,R>>& gradient() const { return gradient_; }
 
         const ElementIga<M,N,R> & element(std::size_t ID) const { return elements_cache_[ID]; }
         ElementIga<M,N,R>& element(std::size_t ID) { return elements_cache_[ID]; }
@@ -155,6 +164,81 @@ MeshIga<M,N,R>::MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<dou
     // wrap the gradient components into a matrixfield
     gradient_ = MatrixField<M,N,M,ParametrizationDerivative<M,N,R>>(grad);
 
+    // setting the dimensions of nodes, boundary and elements matrices
+    std::size_t rows = 1;
+    std::size_t element_rows = 1;
+    std::size_t temp=1;
+    SVector<M,std::size_t> strides;
+    for (std::size_t i=0; i<M; ++i){
+        rows*=knots[i].size();
+        element_rows*=(knots[i].size()-1);
+        strides[i]=temp;
+        temp*=knots[i].size();
+    }
+    nodes_.resize(rows,M);
+    boundary_.resize(rows,1);
+    elements_.resize(element_rows,(1<<M)-1);
+
+    // filling the nodes matrix with the cartesian product of knots
+    // filling column by column
+    // each column is formed by repeating over and over the i-th knot vector
+    // where each of its elements is repeated *stride* times (changes at each cycle)
+    // this ensures that all the possible tuples of knots are considered
+    // boundary points are the ones in which at least one component is the first or the last point of a knot vector
+    for(std::size_t i=0; i<M; ++i){ // cycle over columns
+        for(std::size_t j=0; j<rows/(knots[i].size()*strides[i]);++j){ // each cycle puts a copy of the knot vector
+            for(std::size_t k=0; k<knots[i].size(); ++k){ // cycle along its elements
+                for(std::size_t l=0;l<strides[i];++l){ // repeat each element
+                    std::size_t node_idx = j*rows/(knots[i].size()*strides[i])+k*strides[i]+l;
+                    nodes_(node_idx,i)=knots[i][k];
+                    if(k==0){ // is on boundary if is the first or the last point of the knot vector
+                        boundary_(node_idx)|=1;
+                    }
+                    else if(k==knots[i].size()-1){
+                        // put a special tag to identify that one of the node coordinate is the last along some dimension
+                        // which means that it has no associated element
+                        boundary_(node_idx)|=3; 
+                    }
+                }
+            }
+        }
+    }
+
+    // filling elements matrix row by row
+    // in each row are stored 2^M-1 nodes corresponding to the vertex of the i-th hypercube
+    // all the elements can be univocally identified with a node
+    // except for the boundary nodes in which at least one coordinate is the last point of a knot vector
+    // for each node we only check that it can be associated to an element and then we create the correspondent element
+    
+    // filling the element
+    // consider an M-dimensional hypercube in which each vertex is identified by M binary coordinates,
+    // we call the vertex with coordinates all equal to 0 origin
+    // starting from the origin we can find all the vertices simply moving in each possible combination of the M directions (#2^M-1)
+    // we use this idea to find all the nodes beloging to an element
+    // for each element we pick as origin the node associated to the element
+    // we insert the other nodes in the element moving along the hypercube
+    std::size_t element_idx = 0; // is incremented every time we add a new element 
+    // if the i-th node can't be associated to an element we must change it's boundary value to 1 according to the notation
+    for(std::size_t i=0; i<rows; ++i){
+        if(boundary_(i)&2!=0){
+            boundary_(i)=1;
+        }
+        else{
+            // filling the i-th row 
+            for(std::size_t s=0; s<(1<<M)-1;++s){
+                std::size_t node_idx=i;
+                    for(std::size_t t=0;t<M;++t){
+                        // checking if the s-th node has a 1 in the t-th direction
+                        if(s&(1<<t)!=0){
+                            node_idx+=strides[t]; // we move to the next vertex via the t-th direction
+                        }    
+                    }
+                elements_(element_idx, s)=node_idx;
+            }
+            element_idx++;
+        }
+    }
+    
 }
 
 }; // namespace core
