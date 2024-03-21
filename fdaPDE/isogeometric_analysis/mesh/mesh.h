@@ -36,8 +36,8 @@ template <int M, int N, int R> class ElementIga {
     
     private:
 
-        using ParametrizationType = MeshParametrization<M,N,R>;
-        using GradientType = ParametrizationDerivative<M,N,R>;
+        using ParametrizationType = VectorField<M, N, MeshParametrization<M,N,R>>;
+        using GradientType = MatrixField<M, N, M, ParametrizationDerivative<M,N,R>>;
 
         DVector<std::size_t> functions_; // indexes of the basis functions that have support in the element
         std::size_t ID_; // id of the element
@@ -167,17 +167,23 @@ MeshIga<M,N,R>::MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<dou
     // setting the dimensions of nodes, boundary and elements matrices
     std::size_t rows = 1;
     std::size_t element_rows = 1;
-    std::size_t temp=1;
+    std::size_t tmp = 1;
+    std::size_t tmp_el = 1;
     SVector<M,std::size_t> strides;
+    SVector<M+1,std::size_t> element_strides;
     for (std::size_t i=0; i<M; ++i){
-        rows*=knots[i].size();
-        element_rows*=(knots[i].size()-1);
-        strides[i]=temp;
-        temp*=knots[i].size();
+        rows *= knots[i].size();
+        element_rows *= (knots[i].size()-1);
+        strides[i] = tmp;
+        element_strides[i] = tmp_el;
+        tmp *= knots[i].size();
+        tmp_el *= knots[i].size()-1;
     }
+    element_strides[M] = element_rows;
     nodes_.resize(rows,M);
     boundary_.resize(rows,1);
-    elements_.resize(element_rows,(1<<M)-1);
+    elements_.resize(element_rows,(1<<M));
+    neighbors_ = DMatrix<std::size_t>::Constant(element_rows, 2*M, -1);
 
     // filling the nodes matrix with the cartesian product of knots
     // filling column by column
@@ -185,11 +191,14 @@ MeshIga<M,N,R>::MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<dou
     // where each of its elements is repeated *stride* times (changes at each cycle)
     // this ensures that all the possible tuples of knots are considered
     // boundary points are the ones in which at least one component is the first or the last point of a knot vector
+    for(std::size_t i = 0; i < rows; ++i){
+        boundary_(i) = 0;
+    }
     for(std::size_t i=0; i<M; ++i){ // cycle over columns
         for(std::size_t j=0; j<rows/(knots[i].size()*strides[i]);++j){ // each cycle puts a copy of the knot vector
             for(std::size_t k=0; k<knots[i].size(); ++k){ // cycle along its elements
                 for(std::size_t l=0;l<strides[i];++l){ // repeat each element
-                    std::size_t node_idx = j*rows/(knots[i].size()*strides[i])+k*strides[i]+l;
+                    std::size_t node_idx = j*(knots[i].size()*strides[i])+k*strides[i]+l;
                     nodes_(node_idx,i)=knots[i][k];
                     if(k==0){ // is on boundary if is the first or the last point of the knot vector
                         boundary_(node_idx)|=1;
@@ -220,16 +229,16 @@ MeshIga<M,N,R>::MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<dou
     std::size_t element_idx = 0; // is incremented every time we add a new element 
     // if the i-th node can't be associated to an element we must change it's boundary value to 1 according to the notation
     for(std::size_t i=0; i<rows; ++i){
-        if(boundary_(i)&2!=0){
+        if((boundary_(i)&2)!=0){
             boundary_(i)=1;
         }
         else{
             // filling the i-th row 
-            for(std::size_t s=0; s<(1<<M)-1;++s){
+            for(std::size_t s=0; s<(1<<M);++s){
                 std::size_t node_idx=i;
                     for(std::size_t t=0;t<M;++t){
                         // checking if the s-th node has a 1 in the t-th direction
-                        if(s&(1<<t)!=0){
+                        if((s&(1<<t))!=0){
                             node_idx+=strides[t]; // we move to the next vertex via the t-th direction
                         }    
                     }
@@ -238,8 +247,81 @@ MeshIga<M,N,R>::MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<dou
             element_idx++;
         }
     }
-    
+
+    // each element's neighbors are elements who have the same indexes along each dimension
+    // except for one dimension where the index is the previous or the next one (if they exist)
+    // w.r.t. the considered element
+    // to simplify the computation, we add the "next" element along a direction to the current one's neighbor list
+    // while simultaneously adding the current one to the "next" one's list
+    for(std::size_t i = 0; i < element_rows; ++i){
+        for(std::size_t j = 0; j < M; ++j){
+            std::size_t k = 0;
+            // we need to look for the first uninitialized element
+            // note: it may not be zero if this element was the successor of one that came before
+            while(neighbors_(i, k) != -1){
+                ++k;
+            }
+            // this condition ensures that the element we are considering is not the last one of its row
+            // along the j-th dimension, i.e. that the "next" one is not out of bounds
+            if(!((i+element_strides[j]) % element_strides[j+1] < element_strides[j])){
+                neighbors_(i,k++) = i + element_strides[j];
+                std::size_t l = 0;
+                // we need to look for the first uninitialized element
+                while(neighbors_(i + element_strides[j], l) != -1){
+                    ++l;
+                }
+                neighbors_(i + element_strides[j], l) = i;
+            }
+        }
+    }
+
+    // populate elements_cache_, the id, parametrization and gradient are easy to obtain,
+    // but we must construct the list of indexes of functions that have support on the element
+    // for each dimension there are R+1 basis functions that are not null between two knots,
+    // so we have (R+1)^M different combinations that we find by cycling along a multi-index
+    elements_cache_.resize(element_rows);
+    SVector<M, std::size_t> elMultiIndex;
+    for(std::size_t j = 0; j < M; ++j) { elMultiIndex[j] = 0; };
+
+    std::size_t fnSize = pow(R+1, M);
+    DVector<std::size_t> functions;
+    functions.resize(fnSize);
+    NurbsBasis<M, R> basis(knots, weights);
+
+    for(std::size_t i = 0; i < element_rows; ++i){
+
+        SVector<M, std::size_t> fnMultiIndex(elMultiIndex);
+
+        for(std::size_t j = 0; j < fnSize; ++j){
+
+            functions[j] = basis.index(fnMultiIndex);
+
+            // increment the inner multi-index and perform "carry" operations if necessary
+            std::size_t k = 0;
+            ++fnMultiIndex[k];
+            while(k<M-1 && fnMultiIndex[k] > elMultiIndex[k] + R){
+                fnMultiIndex[k] = elMultiIndex[k];
+                ++k;
+                ++fnMultiIndex[k];
+            }
+        }
+
+        elements_cache_[i] = ElementIga<M,N,R>(functions, i, parametrization_, gradient_);
+
+        // increment the element multi-index and perform "carry" operations if necessary
+        std::size_t k = 0;
+        ++elMultiIndex[k];
+        // the comparison with the knots size is backwards because the function multi-indexes are col-major
+        while(k<M-1 && elMultiIndex[k] >= knots[k].size()-1){
+            elMultiIndex[k] = 0;
+            ++k;
+            ++elMultiIndex[k];
+        }
+
+    }
+
 }
+
 
 }; // namespace core
 }; // namespace fdapde

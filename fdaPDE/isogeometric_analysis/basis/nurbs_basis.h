@@ -90,13 +90,14 @@ template <int M, int R> class NurbsBasis {
 
         // getters
         const Nurbs<M,R>& operator[](std::size_t i) const { return basis_[i]; }
-        const Nurbs<M,R>& operator()(const SVector<M,std::size_t> & index) const { 
+        std::size_t index(const SVector<M,std::size_t> & multiIndex) const {
             std::size_t idx=0;
             for(std::size_t i = 0; i < M; ++i){
-                idx = size(i) * idx + index[i];
+                idx = size(i) * idx + multiIndex[i];
             }
-            return basis_[idx];
+            return idx;
         }
+        const Nurbs<M,R>& operator()(const SVector<M,std::size_t> & multiIndex) const { return basis_[index(multiIndex)]; }
         int size() const { return basis_.size(); }
         int size(std::size_t i) const { return knots_[i].size() - R - 1;}
         const SVector<M,DVector<double>>& knots() const {return knots_;}
