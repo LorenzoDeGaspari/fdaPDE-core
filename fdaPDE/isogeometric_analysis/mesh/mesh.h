@@ -43,14 +43,24 @@ template <int M, int N, int R> class ElementIga {
         std::size_t ID_; // id of the element
         std::shared_ptr<ParametrizationType> parametrization_;
         std::shared_ptr<GradientType> gradient_;
+        SVector<M> left_coords_;
+        SVector<M> right_coords_;
+        double measure_;
+        double integral_measure_; // this value is equal to measure_ / 2^M, it is useful for LGL integrals
 
     public:
 
         ElementIga() = default;
         ElementIga(const DVector<std::size_t> & functions, std::size_t ID, 
-        const ParametrizationType & parametrization, const GradientType & gradient) 
+        const ParametrizationType & parametrization, const GradientType & gradient, const SVector<N> & left_coords, const SVector<N> & right_coords) 
         : functions_(functions), ID_(ID), parametrization_(std::make_shared<ParametrizationType>(parametrization)),
-        gradient_(std::make_shared<GradientType>(gradient))  {}
+        gradient_(std::make_shared<GradientType>(gradient)), left_coords_(left_coords), right_coords_(right_coords)  {
+            measure_ = 1;
+            for(std::size_t i = 0; i < M; ++i){
+                measure_ *= right_coords_[i] - left_coords_[i];
+            }
+            integral_measure_ = measure_ / (1<<M);
+        }
         const VectorField<M, N, ParametrizationType>& parametrization() const { return *parametrization_; }
         const MatrixField<M,N,M,GradientType>& gradient() const { return *gradient_; };
 
@@ -59,6 +69,17 @@ template <int M, int N, int R> class ElementIga {
         std::size_t n_functions() const { return functions_.rows(); }
         // overload operator[] to get directly the i-th index
         std::size_t operator[](std::size_t i) { return functions_[i]; }
+        const SVector<N> & left_coords() const { return left_coords_; }
+        const SVector<N> & right_coords() const { return right_coords_; }
+        double measure() const { return measure_; }
+        double integral_measure() const { return integral_measure_; }
+        SVector<M> affine_map(const SVector<M> & p) const {
+            SVector<M> x;
+            for(std::size_t i = 0; i < M; ++i){
+                x[i] = 0.5*(e.right_coords()[i] + e.left_coords()[i] + (e.right_coords()[i] - e.left_coords()[i]) * p[i]);
+            }
+            return x;
+        }
 
 };
 
