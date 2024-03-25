@@ -76,7 +76,7 @@ template <int M, int N, int R> class ElementIga {
         SVector<M> affine_map(const SVector<M> & p) const {
             SVector<M> x;
             for(std::size_t i = 0; i < M; ++i){
-                x[i] = 0.5*(e.right_coords()[i] + e.left_coords()[i] + (e.right_coords()[i] - e.left_coords()[i]) * p[i]);
+                x[i] = 0.5*(right_coords_[i] + left_coords_[i] + (right_coords_[i] - left_coords_[i]) * p[i]);
             }
             return x;
         }
@@ -327,7 +327,8 @@ MeshIga<M,N,R>::MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<dou
             }
         }
 
-        elements_cache_[i] = ElementIga<M,N,R>(functions, i, parametrization_, gradient_);
+        elements_cache_[i] = ElementIga<M,N,R>(functions, i, parametrization_, gradient_, nodes_.row(elements_.row(i)(0)), 
+                                               nodes_.row(elements_.row(i)((1<<M)-1)));
 
         // increment the element multi-index and perform "carry" operations if necessary
         std::size_t k = 0;
