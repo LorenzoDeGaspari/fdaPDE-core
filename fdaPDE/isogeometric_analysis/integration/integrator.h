@@ -31,7 +31,7 @@ template <int M, int R, int K> class IntegratorIga {
    private:
     IntegratorTable<M, K, GaussLegendre> integration_table_;
    public:
-    Integrator() : integration_table_(IntegratorTable<M, K, GaussLegendre>()) {};
+    IntegratorIga() : integration_table_(IntegratorTable<M, K, GaussLegendre>()) {};
 
     // integrate a callable F over a mesh element e
     template <int N, typename F> double integrate(const ElementIga<M, N, R>& e, const F& f) const;
