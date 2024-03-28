@@ -20,5 +20,10 @@
 #include "isogeometric_analysis/basis/nurbs.h"
 #include "isogeometric_analysis/basis/nurbs_basis.h"
 #include "isogeometric_analysis/mesh/mesh.h"
+#include "isogeometric_analysis/mesh/parametrization.h"
+#include "isogeometric_analysis/integration/integrator.h"
+#include "isogeometric_analysis/operators/advection.h"
+#include "isogeometric_analysis/operators/reaction.h"
+#include "isogeometric_analysis/operators/laplace_beltrami.h"
 
 #endif // __FDAPDE_ISOGEOMETRIC_ANALYSIS_MODULE_H__

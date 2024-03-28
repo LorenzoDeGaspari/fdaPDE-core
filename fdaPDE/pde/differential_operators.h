@@ -31,6 +31,7 @@ namespace core {
 // supported differential operators. The specific discretization is left to strategy T
 FDAPDE_DEFINE_DIFFERENTIAL_OPERATOR(Diffusion,   diffusion  );
 FDAPDE_DEFINE_DIFFERENTIAL_OPERATOR(Laplacian,   laplacian  );
+FDAPDE_DEFINE_DIFFERENTIAL_OPERATOR(LaplaceBeltrami,   laplacebeltrami  );
 FDAPDE_DEFINE_DIFFERENTIAL_OPERATOR(Advection,   advection  );
 FDAPDE_DEFINE_DIFFERENTIAL_OPERATOR(Reaction,    reaction   );
 FDAPDE_DEFINE_DIFFERENTIAL_OPERATOR(dT,          dt         );
