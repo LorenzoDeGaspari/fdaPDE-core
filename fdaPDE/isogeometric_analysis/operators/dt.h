@@ -19,7 +19,7 @@
 
 #include "../../pde/differential_expressions.h"
 #include "../../pde/differential_operators.h"
-#include "../Iga_symbols.h"
+#include "../iga_symbols.h"
 
 namespace fdapde {
 namespace core {
