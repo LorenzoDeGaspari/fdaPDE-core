@@ -25,5 +25,6 @@
 #include "isogeometric_analysis/operators/advection.h"
 #include "isogeometric_analysis/operators/reaction.h"
 #include "isogeometric_analysis/operators/laplace_beltrami.h"
+#include "isogeometric_analysis/iga_assembler.h"
 
 #endif // __FDAPDE_ISOGEOMETRIC_ANALYSIS_MODULE_H__

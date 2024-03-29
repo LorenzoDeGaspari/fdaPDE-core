@@ -65,7 +65,7 @@ double IntegratorIga<M, R, K>::integrate(const ElementIga<M, N, R>& e, F& f) con
         value += f(x) * integration_table_.weights[iq];
     }
     // correct for measure of domain (element e)
-    return value * e.integral_measure_();
+    return value * e.integral_measure();
 }
 
 // perform integration of \int_e [f * \phi] using a basis system defined over the reference element and the change of
@@ -88,7 +88,7 @@ double IntegratorIga<M, R, K>::integrate(const ElementIga<M, N, R>& e, const F& 
         }
     }
     // correct for measure of domain (element e)
-    return value * e.integral_measure_();
+    return value * e.integral_measure();
 }
 
 // integrate a callable F over a mesh element e. Do not require any particular structure for F

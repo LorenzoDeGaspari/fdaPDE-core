@@ -68,7 +68,7 @@ template <int M, int N, int R> class ElementIga {
         const DVector<std::size_t> & functions() const { return functions_; }
         std::size_t n_functions() const { return functions_.rows(); }
         // overload operator[] to get directly the i-th index
-        std::size_t operator[](std::size_t i) { return functions_[i]; }
+        std::size_t operator[] (std::size_t i) const { return functions_[i]; }
         const SVector<N> & left_coords() const { return left_coords_; }
         const SVector<N> & right_coords() const { return right_coords_; }
         double measure() const { return measure_; }
@@ -101,6 +101,9 @@ template <int M, int N, int R> class MeshIga{
         std::vector<ElementIga<M,N,R>> elements_cache_;
 
     public:
+
+        typedef VectorField<M, N, MeshParametrization<N,M,R>> ParametrizationType;
+        typedef MatrixField<M,N,M,ParametrizationDerivative<M,N,R>> DerivativeType;
 
         MeshIga() = default;
         MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<double,M>& weights, const Tensor<double,M+1>& control_points);
@@ -161,6 +164,11 @@ template <int M, int N, int R> class MeshIga{
         iterator end() const { return iterator(this, elements_.rows()); }
         boundary_iterator boundary_begin() const { return boundary_iterator(this, 0); }
         boundary_iterator boundary_end() const { return boundary_iterator(this, n_nodes()); }
+
+        enum {
+            local_dimension = M,
+            embedding_dimension = N,
+        };
 
 };
 
