@@ -61,8 +61,8 @@ template <int M, int N, int R> class ElementIga {
             }
             integral_measure_ = measure_ / (1<<M);
         }
-        const VectorField<M, N, ParametrizationType>& parametrization() const { return *parametrization_; }
-        const MatrixField<M,N,M,GradientType>& gradient() const { return *gradient_; };
+        const ParametrizationType& parametrization() const { return *parametrization_; }
+        const GradientType& gradient() const { return *gradient_; };
 
         std::size_t ID() const { return ID_; }
         const DVector<std::size_t> & functions() const { return functions_; }
