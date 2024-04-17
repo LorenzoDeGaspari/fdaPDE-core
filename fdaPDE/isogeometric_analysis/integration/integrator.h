@@ -21,6 +21,7 @@
 #include "../../fields/scalar_expressions.h"
 #include "../../utils/symbols.h"
 #include "../../utils/integration/integrator_tables.h"
+#include "../../utils/integration/integrator.h"
 
 namespace fdapde {
 namespace core {
@@ -79,7 +80,7 @@ double IntegratorIga<M, R, K>::integrate(const ElementIga<M, N, R>& e, const F& 
         const SVector<M>& x = e.affine_map(integration_table_.nodes[iq]);
         if constexpr (std::is_base_of<ScalarExpr<N, F>, F>::value) {
             // functor f is evaluable at any point.
-            SVector<N> Jx = e.parametrization(x);   // map quadrature point on physical element e
+            SVector<N> Jx = e.parametrization()(x);   // map quadrature point on physical element e
             value += (f(Jx) * Phi(x)) * integration_table_.weights[iq];
         } else {
             // as a fallback we assume f given as vector of values with the assumption that

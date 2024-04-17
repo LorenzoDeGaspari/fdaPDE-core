@@ -52,7 +52,7 @@ template <int M, int N, int R> class ElementIga {
 
         ElementIga() = default;
         ElementIga(const DVector<std::size_t> & functions, std::size_t ID, 
-        const ParametrizationType & parametrization, const GradientType & gradient, const SVector<N> & left_coords, const SVector<N> & right_coords) 
+        const ParametrizationType & parametrization, const GradientType & gradient, const SVector<M> & left_coords, const SVector<M> & right_coords) 
         : functions_(functions), ID_(ID), parametrization_(std::make_shared<ParametrizationType>(parametrization)),
         gradient_(std::make_shared<GradientType>(gradient)), left_coords_(left_coords), right_coords_(right_coords)  {
             measure_ = 1;
@@ -61,8 +61,8 @@ template <int M, int N, int R> class ElementIga {
             }
             integral_measure_ = measure_ / (1<<M);
         }
-        const VectorField<M, N, ParametrizationType>& parametrization() const { return *parametrization_; }
-        const MatrixField<M,N,M,GradientType>& gradient() const { return *gradient_; };
+        const ParametrizationType& parametrization() const { return *parametrization_; }
+        const GradientType& gradient() const { return *gradient_; };
 
         std::size_t ID() const { return ID_; }
         const DVector<std::size_t> & functions() const { return functions_; }
@@ -91,8 +91,9 @@ template <int M, int N, int R> class MeshIga{
         SVector<M,DVector<double>> knots_;
         Tensor<double,M> weights_; // tensor of weights
         Tensor<double,M+1> control_points_; // tensor of the control points (for each weight there is a N-dimensional control point)
-        VectorField<M, N, MeshParametrization<N,M,R>> parametrization_;
+        VectorField<M, N, MeshParametrization<M,N,R>> parametrization_;
         MatrixField<M,N,M,ParametrizationDerivative<M,N,R>> gradient_;
+        NurbsBasis<M, R> basis_;
 
         DMatrix<double> nodes_ {};
         DMatrix<std::size_t> boundary_ {};
@@ -102,14 +103,15 @@ template <int M, int N, int R> class MeshIga{
 
     public:
 
-        typedef VectorField<M, N, MeshParametrization<N,M,R>> ParametrizationType;
+        typedef VectorField<M, N, MeshParametrization<M,N,R>> ParametrizationType;
         typedef MatrixField<M,N,M,ParametrizationDerivative<M,N,R>> DerivativeType;
 
         MeshIga() = default;
         MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<double,M>& weights, const Tensor<double,M+1>& control_points);
 
-        const VectorField<M, N, MeshParametrization<N,M,R>>& parametrization() const { return parametrization_; }
+        const VectorField<M, N, MeshParametrization<M,N,R>>& parametrization() const { return parametrization_; }
         const MatrixField<M,N,M,ParametrizationDerivative<M,N,R>>& gradient() const { return gradient_; }
+        const NurbsBasis<M, R> & basis() const { return basis_; }
 
         const ElementIga<M,N,R> & element(std::size_t ID) const { return elements_cache_[ID]; }
         ElementIga<M,N,R>& element(std::size_t ID) { return elements_cache_[ID]; }
@@ -174,7 +176,7 @@ template <int M, int N, int R> class MeshIga{
 
 template <int M, int N, int R>
 MeshIga<M,N,R>::MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<double,M>& weights, const Tensor<double,M+1>& control_points) :
-    knots_(knots), weights_(weights), control_points_(control_points) {
+    knots_(knots), weights_(weights), control_points_(control_points), basis_(knots, weights) {
 
     // build the domain parametrization function and its derivative
     std::vector<MeshParametrization<M,N,R>> param;
@@ -189,7 +191,7 @@ MeshIga<M,N,R>::MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<dou
         }
     }
     // wrap the parametrization components into a vectorfield
-    parametrization_ = VectorField<M, N, MeshParametrization<N,M,R>>(param);
+    parametrization_ = VectorField<M, N, MeshParametrization<M,N,R>>(param);
     // wrap the gradient components into a matrixfield
     gradient_ = MatrixField<M,N,M,ParametrizationDerivative<M,N,R>>(grad);
 
@@ -315,7 +317,6 @@ MeshIga<M,N,R>::MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<dou
     std::size_t fnSize = pow(R+1, M);
     DVector<std::size_t> functions;
     functions.resize(fnSize);
-    NurbsBasis<M, R> basis(knots, weights);
 
     for(std::size_t i = 0; i < element_rows; ++i){
 
@@ -323,7 +324,7 @@ MeshIga<M,N,R>::MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<dou
 
         for(std::size_t j = 0; j < fnSize; ++j){
 
-            functions[j] = basis.index(fnMultiIndex);
+            functions[j] = basis_.index(fnMultiIndex);
 
             // increment the inner multi-index and perform "carry" operations if necessary
             std::size_t k = 0;
