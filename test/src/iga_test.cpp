@@ -32,6 +32,7 @@ using fdapde::core::ScalarField;
 using fdapde::core::IGA;
 using fdapde::core::IntegratorIga;
 using fdapde::core::LaplaceBeltrami;
+using fdapde::core::Advection;
 using fdapde::core::Reaction;
 using fdapde::core::PDE;
 using fdapde::core::iga_order;
@@ -290,9 +291,9 @@ TEST(isogeometric_analysis_test, mesh_structure){
 
     for(size_t i = 0; i < 5; i++)nodes[0](i)=nodes[1](i)=nodes[2](i)=1.*i;
 
-    for(size_t i = 0; i < 2; i++)
-        for(size_t j = 0; j < 3; j++)
-            for(size_t k = 0; k < 2; k++)
+    for(size_t i = 0; i < 6; i++)
+        for(size_t j = 0; j < 6; j++)
+            for(size_t k = 0; k < 6; k++)
                 weights(i,j,k) = 1.;
 
     for(size_t i = 0; i < 6; i++){
