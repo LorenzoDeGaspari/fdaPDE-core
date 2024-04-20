@@ -19,12 +19,22 @@
 #include <fdaPDE/utils.h>
 #include <fdaPDE/isogeometric_analysis.h>
 #include <unsupported/Eigen/SparseExtra>
+#include <fdaPDE/pde.h>
 using fdapde::core::integrate_2D;
 using fdapde::core::IntegratorTable;
 using fdapde::core::GaussLegendre;
 using fdapde::core::Nurbs;
 using fdapde::core::NurbsBasis;
 using fdapde::core::MeshIga;
+using fdapde::core::Assembler;
+using fdapde::core::IGALinearEllipticSolver;
+using fdapde::core::ScalarField;
+using fdapde::core::IGA;
+using fdapde::core::IntegratorIga;
+using fdapde::core::LaplaceBeltrami;
+using fdapde::core::Reaction;
+using fdapde::core::PDE;
+using fdapde::core::iga_order;
 
 // tests if the integration of the constant field 1 over a quad equals its measure
 TEST(isogeometric_analysis_test, integrate_constant) {
@@ -267,4 +277,83 @@ TEST(isogeometric_analysis_test, mesh_parametrization){
         }
     }
 
+}
+
+TEST(isogeometric_analysis_test, mesh_structure){
+
+    SVector<3,DVector<double>> nodes;
+    Eigen::Tensor<double,3> weights(6,6,6);
+    Eigen::Tensor<double,4> controlpoints(6,6,6,3);
+    nodes[0].resize(5);
+    nodes[1].resize(5);
+    nodes[2].resize(5);
+
+    for(size_t i = 0; i < 5; i++)nodes[0](i)=nodes[1](i)=nodes[2](i)=1.*i;
+
+    for(size_t i = 0; i < 2; i++)
+        for(size_t j = 0; j < 3; j++)
+            for(size_t k = 0; k < 2; k++)
+                weights(i,j,k) = 1.;
+
+    for(size_t i = 0; i < 6; i++){
+        for(size_t j = 0; j < 6; j++){
+            for(size_t k = 0; k < 6; k++){
+                controlpoints(i,j,k,0) = 1.*i;
+                controlpoints(i,j,k,1) = 1.*j;
+                controlpoints(i,j,k,2) = 1.*k;
+            }
+        }
+    }
+    
+    MeshIga<3,3,2> msh(nodes, weights, controlpoints);
+
+    SpMatrix<double> act_nodes;
+    act_nodes = msh.nodes().sparseView();
+    SpMatrix<double> expected_nodes;
+    Eigen::loadMarket(expected_nodes, "../data/mtx/mesh_structure/nodes.mtx");
+    EXPECT_TRUE(act_nodes.isApprox(expected_nodes));
+
+    SpMatrix<size_t> act_elements;
+    act_elements = msh.elements().sparseView();
+    SpMatrix<size_t> expected_elements;
+    Eigen::loadMarket(expected_elements, "../data/mtx/mesh_structure/elements.mtx");
+    EXPECT_TRUE(act_elements.isApprox(expected_elements));
+
+    SpMatrix<size_t> act_neighbors;
+    act_neighbors = msh.neighbors().sparseView();
+    SpMatrix<size_t> expected_neighbors;
+    Eigen::loadMarket(expected_neighbors, "../data/mtx/mesh_structure/neighbors.mtx");
+    EXPECT_TRUE(act_neighbors.isApprox(expected_neighbors));
+
+    SpMatrix<size_t> act_boundary;
+    act_boundary = msh.boundary().sparseView();
+    SpMatrix<size_t> expected_boundary;
+    Eigen::loadMarket(expected_boundary, "../data/mtx/mesh_structure/boundary.mtx");
+    EXPECT_TRUE(act_boundary.isApprox(expected_boundary));
+}
+
+TEST(isogeometric_analysis_test, integrator){
+
+    SVector<3,DVector<double>> nodes;
+    Eigen::Tensor<double,3> weights(4,4,4);
+    Eigen::Tensor<double,4> controlpoints(4,4,4,3);
+    nodes[0].resize(2);
+    nodes[1].resize(2);
+    nodes[2].resize(2);
+
+    for(size_t i = 0; i < 2; i++)nodes[0](i)=nodes[1](i)=nodes[2](i)=1.*i;
+
+    for(size_t i = 0; i < 4; i++)
+        for(size_t j = 0; j < 4; j++)
+            for(size_t k = 0; k < 4; k++)
+                weights(i,j,k) = 1.;
+    
+    MeshIga<3,3,3> msh(nodes, weights, controlpoints);
+    IntegratorIga<3, 3, 27> itg;
+    // exact integral of x^3 + 2x^2y - 2xy^2 + 4xyz + z^3 is equal to 1
+    auto f = [] (const SVector<3> & x) -> double 
+        {return x[0]*x[0]*x[0] + 2*x[0]*x[0]*x[1] - 2*x[0]*x[1]*x[1] + 4*x[0]*x[1]*x[2] + x[2]*x[2]*x[2];};
+
+    EXPECT_TRUE(almost_equal(1., itg.integrate(msh.element(0), f)));
+    EXPECT_TRUE(almost_equal(1., itg.integrate(msh, f)));
 }
