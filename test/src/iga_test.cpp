@@ -312,25 +312,46 @@ TEST(isogeometric_analysis_test, mesh_structure){
     act_nodes = msh.nodes().sparseView();
     SpMatrix<double> expected_nodes;
     Eigen::loadMarket(expected_nodes, "../data/mtx/mesh_structure/nodes.mtx");
-    EXPECT_TRUE(act_nodes.isApprox(expected_nodes));
+    
+    for(std::size_t i = 0; i < act_nodes.rows(); ++i){
+        for(std::size_t j = 0; j < act_nodes.cols(); ++j){
+            EXPECT_TRUE(almost_equal(act_nodes.coeff(i,j), expected_nodes.coeff(i,j)));
+        }
+    }
 
     SpMatrix<size_t> act_elements;
     act_elements = msh.elements().sparseView();
     SpMatrix<size_t> expected_elements;
     Eigen::loadMarket(expected_elements, "../data/mtx/mesh_structure/elements.mtx");
-    EXPECT_TRUE(act_elements.isApprox(expected_elements));
+
+    for(std::size_t i = 0; i < act_elements.rows(); ++i){
+        for(std::size_t j = 0; j < act_elements.cols(); ++j){
+            EXPECT_TRUE(act_elements.coeff(i,j) == expected_elements.coeff(i,j));
+        }
+    }
 
     SpMatrix<size_t> act_neighbors;
     act_neighbors = msh.neighbors().sparseView();
     SpMatrix<size_t> expected_neighbors;
     Eigen::loadMarket(expected_neighbors, "../data/mtx/mesh_structure/neighbors.mtx");
-    EXPECT_TRUE(act_neighbors.isApprox(expected_neighbors));
+
+    for(std::size_t i = 0; i < act_neighbors.rows(); ++i){
+        for(std::size_t j = 0; j < act_neighbors.cols(); ++j){
+            EXPECT_TRUE(act_neighbors.coeff(i,j) == expected_neighbors.coeff(i,j));
+        }
+    }
 
     SpMatrix<size_t> act_boundary;
     act_boundary = msh.boundary().sparseView();
     SpMatrix<size_t> expected_boundary;
     Eigen::loadMarket(expected_boundary, "../data/mtx/mesh_structure/boundary.mtx");
-    EXPECT_TRUE(act_boundary.isApprox(expected_boundary));
+    
+    for(std::size_t i = 0; i < act_boundary.rows(); ++i){
+        for(std::size_t j = 0; j < act_boundary.cols(); ++j){
+            EXPECT_TRUE(act_boundary.coeff(i,j) == expected_boundary.coeff(i,j));
+        }
+    }
+
 }
 
 TEST(isogeometric_analysis_test, integrator){
@@ -357,4 +378,66 @@ TEST(isogeometric_analysis_test, integrator){
 
     EXPECT_TRUE(almost_equal(1., itg.integrate(msh.element(0), f)));
     EXPECT_TRUE(almost_equal(1., itg.integrate(msh, f)));
+}
+
+TEST(isogeometric_analysis_test, assembler){
+
+    SVector<2,DVector<double>> nodes;
+    Eigen::Tensor<double,2> weights(4,4);
+    Eigen::Tensor<double,3> controlpoints(4,4,2);
+    nodes[0].resize(3);
+    nodes[1].resize(3);
+
+    for(size_t i = 0; i < 3; i++)nodes[0](i)=nodes[1](i)=1.*i;
+
+    for(size_t i = 0; i < 4; i++)
+        for(size_t j = 0; j < 4; j++)
+            weights(i,j) = 1.;
+    
+    for(size_t i = 0; i < 4; i++){
+        for(size_t j = 0; j < 4; j++){
+            controlpoints(i,j,0) = 1.*i + 1.*j;
+            controlpoints(i,j,1) = 1.*j;
+        }
+    }
+    
+    MeshIga<2,2,2> msh(nodes, weights, controlpoints);
+    IntegratorIga<2,2,4> itg;
+    NurbsBasis<2,2> basis(nodes, weights);
+    Assembler<IGA, decltype(msh), decltype(basis), decltype(itg)> asb(msh, itg, basis.size(), basis);
+
+    auto K = -LaplaceBeltrami<IGA>();
+    auto A = Advection<IGA,SVector<2>>(SVector<2>(1,0));
+    auto M = Reaction<IGA, double>(1.);
+    auto f = [] (const SVector<2> & x) -> double { return x[0]-x[1]; };
+    ScalarField<2> ff;
+    ff = f;
+
+    auto K_mat = asb.discretize_operator(K);
+    SpMatrix<double> K_exp;
+    Eigen::loadMarket(K_exp, "../data/mtx/iga_operators/laplacebeltrami.mtx");
+
+    auto A_mat = asb.discretize_operator(A);
+    SpMatrix<double> A_exp;
+    Eigen::loadMarket(A_exp, "../data/mtx/iga_operators/advection.mtx");
+
+    auto M_mat = asb.discretize_operator(M);
+    SpMatrix<double> M_exp;
+    Eigen::loadMarket(M_exp, "../data/mtx/iga_operators/reaction.mtx");
+
+    auto f_vec = asb.discretize_forcing(ff);
+    SpMatrix<double> f_mat = f_vec.sparseView();
+    SpMatrix<double> f_exp;
+    Eigen::loadMarket(f_exp, "../data/mtx/iga_operators/force.mtx");
+
+    for(std::size_t i = 0; i < K_mat.rows(); ++i){
+        for(std::size_t j = 0; j < K_mat.cols(); ++j){
+            EXPECT_TRUE(almost_equal(K_mat.coeff(i,j), K_exp.coeff(i,j)));
+            EXPECT_TRUE(almost_equal(A_mat.coeff(i,j), A_exp.coeff(i,j)));
+            EXPECT_TRUE(almost_equal(M_mat.coeff(i,j), M_exp.coeff(i,j)));
+        }
+        EXPECT_TRUE(almost_equal(f_mat.coeff(i,0), f_exp.coeff(i,0)));
+    }
+
+
 }
