@@ -227,18 +227,23 @@ template <int M, int R> class Nurbs : public ScalarExpr<M,Nurbs<M,R>>{
      SVector<M,std::size_t> index_; // knots indexes where this basis is centered
      VectorField<M, M, NurbsDerivative<M, R>> gradient_; //gradient
      MatrixField<M,M,M,NurbsSecondDerivative<M,R>> hessian_; //hessian
+     SVector<M, std::size_t> minIdx_;
+     Eigen::array<Eigen::Index, M> extents_;
+     double num0_;
 
     public:
     // constructor
      Nurbs() = default;
      Nurbs(const SVector<M,DVector<double>>& knots,const Tensor<double,M>& weights,const SVector<M,std::size_t>& index) : knots_(knots), 
-     weights_(weights), index_(index) {
+     index_(index) {
         std::vector<NurbsDerivative<M, R>> gradient;
         std::array<std::array<NurbsSecondDerivative<M, R>,M>,M> hessian;
 	    gradient.reserve(M);
         // define i-th element of gradient field (= partial derivative wrt i-th coordinate) 
         // define i,j-th element of the hessian field (=partial second derivative wrt i-th and j-th coordinate)
         for (std::size_t i = 0; i < M; ++i) {
+            minIdx_[i] = (index_[i] >= R)? (index_[i]-R) : 0;
+            extents_[i] = (index_[i] + R < weights.dimension(i))? (index_[i]+R+1-minIdx_[i]) : (weights.dimension(i)-minIdx_[i]);
             gradient.emplace_back(knots,weights,index,i);
             for(std::size_t j=i;j<M;++j){
                 //using symmetry of hessian matrix since NURBS function enjoys Schwarz property where they are differentiable
@@ -250,6 +255,9 @@ template <int M, int R> class Nurbs : public ScalarExpr<M,Nurbs<M,R>>{
         // wrap the hessian components into a matrixfield
         hessian_= MatrixField<M,M,M,NurbsSecondDerivative<M,R>>(hessian);
 
+        weights_ = weights.slice(minIdx_, extents_);
+        num0_ = weights(index_);
+
      };
 
      Nurbs(const DVector<double>& knots, const Tensor<double,M>& weights, const SVector<M,std::size_t>& index) : 
@@ -258,7 +266,7 @@ template <int M, int R> class Nurbs : public ScalarExpr<M,Nurbs<M,R>>{
     //evaluates the NURBS at a given point 
      inline double operator()(const SVector<M>& x) const {
         
-        double num=weights_(index_);
+        double num=num0_;
         SVector<M,Tensor<double,1>> spline_evaluation;
         double den;
 
@@ -266,16 +274,19 @@ template <int M, int R> class Nurbs : public ScalarExpr<M,Nurbs<M,R>>{
         // and compute the NURBS numerator
         for(std::size_t i=0;i<M;i++){
             //resize i-th tensor according to i-th weights dimension
-            spline_evaluation[i].resize(weights_.dimension(i));
+            spline_evaluation[i].resize(extents_[i]);
             //numerator update
             num=num*Spline<R>(knots_[i], index_[i])(SVector<1>(x[i]));
             //spline evaluation for i-th dimension
-            for(std::size_t j=0; j<weights_.dimension(i); j++){
-                spline_evaluation[i](j)=Spline<R>(knots_[i], j)(SVector<1>(x[i]));
+            for(std::size_t j=0; j<extents_[i]; j++){
+                spline_evaluation[i](j)=Spline<R>(knots_[i], j+minIdx_[i])(SVector<1>(x[i]));
             }
         }
+        // avoid division by 0
+        if(num == 0)
+            return 0;
         // compute the sum that appears at the denominator of the formula
-        den= multicontract<M,0>(weights_,spline_evaluation);
+        den = multicontract<M,0>(weights_, spline_evaluation);
         return num/den;
     };
 
