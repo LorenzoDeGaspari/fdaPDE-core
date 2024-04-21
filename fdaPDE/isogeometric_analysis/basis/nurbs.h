@@ -63,19 +63,31 @@ template <int M, int R> class NurbsDerivative : public VectorExpr<M,M,NurbsDeriv
      Tensor<double,M> weights_; // tensor of weights
      SVector<M,std::size_t> index_; // knots indexes where this basis is centered
      std::size_t i_; // index of the spatial coordinate along which the NURBS function is differentiated
+     SVector<M, std::size_t> minIdx_;
+     Eigen::array<Eigen::Index, M> extents_;
+     double num0_;
 
     public:
     // constructor
      NurbsDerivative() = default;
      NurbsDerivative(const SVector<M,DVector<double>>& knots, const Tensor<double,M>& weights,const SVector<M,std::size_t>& index,
-     std::size_t i) : knots_(knots), weights_(weights), index_(index), i_(i) {};
+     std::size_t i) : knots_(knots), index_(index), i_(i) {
+
+        for (std::size_t i = 0; i < M; ++i) {
+            minIdx_[i] = (index_[i] >= R)? (index_[i]-R) : 0;
+            extents_[i] = (index_[i] + R < weights.dimension(i))? (index_[i]+R+1-minIdx_[i]) : (weights.dimension(i)-minIdx_[i]);
+        }
+        weights_ = weights.slice(minIdx_, extents_);
+        num0_ = weights(index_);
+
+     };
      NurbsDerivative(const DVector<double>& knots, const Tensor<double,M>& weights, const SVector<M,std::size_t>& index, std::size_t i) : 
      NurbsDerivative(SVector<M,DVector<double>>(knots),weights,index,i) {};
 
     //evaluates the NURBS first partial derivative at a given point
     inline double operator()(const SVector<M>& x) const {
 
-        double num(weights_(index_)); // numerator of the NURBS formula
+        double num = num0_; // numerator of the NURBS formula
         double num_derived; // partial derivative of num w.r.t. i-th coordinate
         SVector<M,Tensor<double,1>> spline_evaluation; // pointwise evaluation of all splines along each coordinate
         double den;// denominator of the NURBS formula
@@ -86,13 +98,13 @@ template <int M, int R> class NurbsDerivative : public VectorExpr<M,M,NurbsDeriv
         //and compute the NURBS numerator except the i-th spline
         for(std::size_t k=0; k<M; k++){
             //resize k-th tensor according to k-th weights dimension
-            spline_evaluation[k].resize(weights_.dimension(k));
+            spline_evaluation[k].resize(extents_[k]);
             if(k!=i_){
                 num=num*Spline<R>(knots_[k], index_[k])(SVector<1>(x[k]));
             }
             //spline evaluation for k-th dimension
-            for(std::size_t j=0; j<weights_.dimension(k); j++){
-                spline_evaluation[k](j)=Spline<R>(knots_[k], j)(SVector<1>(x[k]));
+            for(std::size_t j=0; j<extents_[k]; j++){
+                spline_evaluation[k](j)=Spline<R>(knots_[k], j+minIdx_[k])(SVector<1>(x[k]));
             }
         }
 
@@ -100,11 +112,15 @@ template <int M, int R> class NurbsDerivative : public VectorExpr<M,M,NurbsDeriv
         num_derived=num*Spline<R>(knots_[i_], index_[i_]).template derive<1>()(SVector<1>(x[i_]));
         // the actual numerator is just multiplied by the spline value
         num = num*Spline<R>(knots_[i_], index_[i_])(SVector<1>(x[i_]));
+
+        if(num == 0 && num_derived == 0)
+            return 0;
+
         // compute the sum that appears at the denominator of the formula
         den= multicontract<M,0>(weights_,spline_evaluation);
         // by replacing the i-th evaluations with their derivatives we get the derivative of the NURBS denominator
-        for(std::size_t j=0; j<weights_.dimension(i_); j++){
-            spline_evaluation[i_](j)=Spline<R>(knots_[i_], j).template derive<1>()(SVector<1>(x[i_]));
+        for(std::size_t j=0; j<extents_[i_]; j++){
+            spline_evaluation[i_](j)=Spline<R>(knots_[i_], j+minIdx_[i_]).template derive<1>()(SVector<1>(x[i_]));
         }
         den_derived= multicontract<M,0>(weights_,spline_evaluation);
 
