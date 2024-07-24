@@ -141,19 +141,31 @@ template <int M, int R> class NurbsSecondDerivative : public MatrixExpr<M,M,M,Nu
      SVector<M,std::size_t> index_; // knots indexes where this basis is centered
      std::size_t i_; // index of the spatial coordinate along which the NURBS function is differentiated
      std::size_t j_; // index of the spatial coordinate along which the NURBS function is differentiated
+     SVector<M, std::size_t> minIdx_;
+     Eigen::array<Eigen::Index, M> extents_;
+     double num0_;
 
     public:
     // constructor
      NurbsSecondDerivative() = default;
      NurbsSecondDerivative(const SVector<M,DVector<double>>& knots, const Tensor<double,M>& weights,const SVector<M,std::size_t>& index,
-     std::size_t i, std::size_t j) : knots_(knots), weights_(weights), index_(index), i_(i), j_(j) {};
+     std::size_t i, std::size_t j) : knots_(knots), weights_(weights), index_(index), i_(i), j_(j) {
+
+        for (std::size_t i = 0; i < M; ++i) {
+            minIdx_[i] = (index_[i] >= R)? (index_[i]-R) : 0;
+            extents_[i] = (index_[i] + R < weights.dimension(i))? (index_[i]+R+1-minIdx_[i]) : (weights.dimension(i)-minIdx_[i]);
+        }
+        weights_ = weights.slice(minIdx_, extents_);
+        num0_ = weights(index_);
+
+     };
      NurbsSecondDerivative(const DVector<double>& knots, const Tensor<double,M>& weights, const SVector<M,std::size_t>& index,
      std::size_t i, std::size_t j) : NurbsSecondDerivative(SVector<M,DVector<double>>(knots),weights,index,i,j) {};
 
     //evaluates the NURBS second-derivative at a given point
     inline double operator()(const SVector<M>& x) const {
         
-        double num(weights_(index_)); // numerator of the NURBS formula
+        double num = num0_; // numerator of the NURBS formula
         double num_der_i; // partial derivative of num w.r.t. i-th coordinate
         double num_der_j; // partial derivative of num w.r.t. j-th coordinate
         double num_der_ij; // mixed partial derivative of num
@@ -167,15 +179,15 @@ template <int M, int R> class NurbsSecondDerivative : public MatrixExpr<M,M,M,Nu
         //and compute the NURBS numerator except the i-th and j-th splines 
         for(std::size_t k=0; k<M; k++){
             //resize i-th tensor according to i-th weights dimension
-            spline_evaluation[k].resize(weights_.dimension(k));
+            spline_evaluation[k].resize(extents_[k]);
             //numerator update
             //numerator derivatives update
             if(k!=i_ && k!=j_){
                 num=num*Spline<R>(knots_[k], index_[k])(SVector<1>(x[k]));
             }
             //spline evaluation for i-th dimension
-            for(std::size_t j=0; j<weights_.dimension(k); j++){
-                spline_evaluation[k](j)=Spline<R>(knots_[k], j)(SVector<1>(x[k]));
+            for(std::size_t j=0; j<extents_[k]; j++){
+                spline_evaluation[k](j)=Spline<R>(knots_[k], j+minIdx_[k])(SVector<1>(x[k]));
             }
         }
 
@@ -189,21 +201,24 @@ template <int M, int R> class NurbsSecondDerivative : public MatrixExpr<M,M,M,Nu
                              * Spline<R>(knots_[j_], index_[j_]).template derive<1>()(SVector<1>(x[j_]));
             num =        num * Spline<R>(knots_[i_], index_[i_])(SVector<1>(x[i_]))
                              * Spline<R>(knots_[j_], index_[j_])(SVector<1>(x[j_]));
+            if (num_der_ij == 0 && num_der_i == 0 && num_der_j == 0 && num == 0){
+                return 0;
+            }
             // compute the sum that appears at the denominator of the formula
             den= multicontract<M,0>(weights_,spline_evaluation);
             // replace the i-th component splines with their derivative
-            for(std::size_t k=0; k<weights_.dimension(i_); k++){
-                spline_evaluation[i_](k)=Spline<R>(knots_[i_], k).template derive<1>()(SVector<1>(x[i_]));
+            for(std::size_t k=0; k<extents_[i_]; k++){
+                spline_evaluation[i_](k)=Spline<R>(knots_[i_], k+minIdx_[i_]).template derive<1>()(SVector<1>(x[i_]));
             }
             den_der_i = multicontract<M,0>(weights_,spline_evaluation);
             // replace the j-th component splines with their derivative
-            for(std::size_t k=0; k<weights_.dimension(j_); k++){
-                spline_evaluation[j_](k)=Spline<R>(knots_[j_], k).template derive<1>()(SVector<1>(x[j_]));
+            for(std::size_t k=0; k<extents_[j_]; k++){
+                spline_evaluation[j_](k)=Spline<R>(knots_[j_], k+minIdx_[j_]).template derive<1>()(SVector<1>(x[j_]));
             }
             den_der_ij = multicontract<M,0>(weights_,spline_evaluation);
             // replace back the i-th component splines
-            for(std::size_t k=0; k<weights_.dimension(i_); k++){
-                spline_evaluation[i_](k)=Spline<R>(knots_[i_], k)(SVector<1>(x[i_]));
+            for(std::size_t k=0; k<extents_[i_]; k++){
+                spline_evaluation[i_](k)=Spline<R>(knots_[i_], k+minIdx_[i_])(SVector<1>(x[i_]));
             }
             den_der_j = multicontract<M,0>(weights_,spline_evaluation);
         }
@@ -213,16 +228,19 @@ template <int M, int R> class NurbsSecondDerivative : public MatrixExpr<M,M,M,Nu
             // the mixed derivative becomes a second derivative
             num_der_ij = num * Spline<R>(knots_[i_], index_[i_]).template derive<2>()(SVector<1>(x[i_]));
             num = num * Spline<R>(knots_[i_], index_[i_])(SVector<1>(x[i_]));
+            if (num_der_ij == 0 && num_der_i == 0 && num == 0){
+                return 0;
+            }
             // compute the sum that appears at the denominator of the formula
             den= multicontract<M,0>(weights_,spline_evaluation);
             // replace the i-th component splines with their derivative
-            for(std::size_t k=0; k<weights_.dimension(i_); k++){
-                spline_evaluation[i_](k)=Spline<R>(knots_[i_], k).template derive<1>()(SVector<1>(x[i_]));
+            for(std::size_t k=0; k<extents_[i_]; k++){
+                spline_evaluation[i_](k)=Spline<R>(knots_[i_], k+minIdx_[i_]).template derive<1>()(SVector<1>(x[i_]));
             }
             den_der_i = den_der_j = multicontract<M,0>(weights_,spline_evaluation);
             // replace the i-th component derivatives with the second derivative
-            for(std::size_t k=0; k<weights_.dimension(i_); k++){
-                spline_evaluation[i_](k)=Spline<R>(knots_[i_], k).template derive<2>()(SVector<1>(x[i_]));
+            for(std::size_t k=0; k<extents_[i_]; k++){
+                spline_evaluation[i_](k)=Spline<R>(knots_[i_], k+minIdx_[i_]).template derive<2>()(SVector<1>(x[i_]));
             }
             den_der_ij = multicontract<M,0>(weights_,spline_evaluation);
         }
