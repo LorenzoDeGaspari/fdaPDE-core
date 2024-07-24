@@ -352,6 +352,17 @@ TEST(isogeometric_analysis_test, mesh_structure){
         }
     }
 
+    SpMatrix<size_t> act_bound_dofs;
+    act_bound_dofs = msh.boundary_dofs().sparseView();
+    SpMatrix<size_t> expected_bound_dofs;
+    Eigen::loadMarket(expected_bound_dofs, "../data/mtx/mesh_structure/boundary_dofs.mtx");
+
+    for(std::size_t i = 0; i < act_bound_dofs.rows(); ++i){
+        for(std::size_t j = 0; j < act_bound_dofs.cols(); ++j){
+            EXPECT_TRUE(act_bound_dofs.coeff(i,j) == expected_bound_dofs.coeff(i,j));
+        }
+    }
+
 }
 
 TEST(isogeometric_analysis_test, integrator){

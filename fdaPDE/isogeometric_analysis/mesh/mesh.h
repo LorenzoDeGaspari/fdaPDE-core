@@ -100,6 +100,7 @@ template <int M, int N, int R> class MeshIga{
         DMatrix<std::size_t, Eigen::RowMajor> elements_ {};
         DMatrix<std::size_t> neighbors_ {};
         std::vector<ElementIga<M,N,R>> elements_cache_;
+        DMatrix<std::size_t> boundary_dofs_ {};
 
     public:
 
@@ -121,6 +122,7 @@ template <int M, int N, int R> class MeshIga{
         const DMatrix<std::size_t, Eigen::RowMajor>& elements() const { return elements_; }
         const DMatrix<std::size_t> & neighbors() const { return neighbors_; }
         const DMatrix<std::size_t>& boundary() const { return boundary_; }
+        const DMatrix<std::size_t>& boundary_dofs() const { return boundary_dofs_; }
         int n_elements() const { return elements_.rows(); }
         int n_nodes() const { return nodes_.rows(); }
 
@@ -350,6 +352,58 @@ MeshIga<M,N,R>::MeshIga(const SVector<M,DVector<double>>& knots,const Tensor<dou
         }
 
     }
+
+    // recover information on which functions are not identically null on the boundary of the domain
+    // unlike the FEM lagrangian basis, this is not a trivial information to gather from nodes info
+    // first compute how many are there
+    std::size_t n_boundary_dofs = 0;
+    std::size_t tmp_bd = 2;
+    for(std::size_t i = 1; i < M; ++i){
+        // for each dimension we can couple the first and last (2) univariate B-Splines
+        // with any other from the other dimensions
+        tmp_bd *= weights_.dimension(i);
+    }
+    n_boundary_dofs += tmp_bd;
+    for(std::size_t i = 0; i < M-1; ++i){
+        // compute in 2 lines to avoid integer division
+        tmp_bd *= weights_.dimension(i) - 2; // the -2 is to not count twice the functions that touch the boundary in more dimensions
+        tmp_bd /= weights_.dimension(i+1);
+        n_boundary_dofs += tmp_bd;
+    }
+
+    boundary_dofs_.resize(n_boundary_dofs,1);
+
+    // cycle all functions
+    SVector<M, std::size_t> fnMultiIndex;
+    for(std::size_t i = 0; i < M; ++i){
+        fnMultiIndex[i] = 0;
+    }
+    for(std::size_t i = 0; i < n_boundary_dofs;){ // increment only if the function is added to the boundary list
+
+        bool is_on_bd = false;
+        // check for a specific function if it is on boundary
+        for(std::size_t j = 0; j < M && !is_on_bd; ++j){
+            if(fnMultiIndex[j] == 0 || fnMultiIndex[j] == weights_.dimension(j) - 1){
+                is_on_bd = true;
+            }
+        }
+
+        if(is_on_bd){
+            boundary_dofs_(i) = basis_.index(fnMultiIndex);
+            ++i; // increment only if the function is added to the boundary list
+        }
+
+        // increment the inner multi-index and perform "carry" operations if necessary
+        std::size_t k = M-1;
+        ++fnMultiIndex[k];
+        while(k>0 && fnMultiIndex[k] >= weights_.dimension(k) ){
+            fnMultiIndex[k] = 0;
+            --k;
+            ++fnMultiIndex[k];
+        }
+
+    }
+    
 
 }
 
