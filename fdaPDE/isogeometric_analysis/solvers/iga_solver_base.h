@@ -128,7 +128,13 @@ template <typename PDE>
 void IGASolverBase<D, E, F, Ts...>::set_dirichlet_bc(const PDE& pde) {
     static_assert(is_pde<PDE>::value, "not a valid PDE");
     if (!is_init) throw std::runtime_error("solver must be initialized first!");
-    // TODO: currently not supported
+    for (auto it = boundary_dofs_begin(); it != boundary_dofs_end(); ++it) {
+      R1_.row(*it) *= 0;            // zero all entries of this row
+      R1_.coeffRef(*it, *it) = 1;   // set diagonal element to 1 to impose equation u_j = b_j
+	
+      // TODO: currently only homogeneous case supported
+      force_.coeffRef(*it, 0) = 0;   // impose boundary value on forcing term
+    }
     return;
 }
   
@@ -137,7 +143,7 @@ template <typename D, typename E, typename F, typename... Ts>
 void IGASolverBase<D, E, F, Ts...>::enumerate_dofs(const D& mesh) {
   if(n_dofs_ != 0) return; // return early if dofs already computed
     n_dofs_ = mesh.basis().size();
-    boundary_dofs_ = mesh.boundary();
+    boundary_dofs_ = mesh.boundary_dofs();
 }
 
 template <typename D, typename E, typename F, typename... Ts>
