@@ -66,6 +66,28 @@ template <typename D, typename E, typename F, typename... Ts> class IGASolverBas
 
     template <typename PDE> void init(const PDE& pde);
     template <typename PDE> void set_dirichlet_bc(const PDE& pde);
+
+    struct boundary_dofs_iterator {   // range-for loop over boundary dofs
+       private:
+        friend IGASolverBase;
+        const IGASolverBase* iga_solver_;
+        int index_;   // current boundary dof
+        boundary_dofs_iterator(const IGASolverBase* iga_solver, int index) : iga_solver_(iga_solver), index_(index) {};
+       public:
+        // fetch next boundary dof
+        boundary_dofs_iterator& operator++() {
+            index_++;
+            // scan until all nodes have been visited or a boundary node is not found
+            for (; index_ < iga_solver_->n_dofs_ && iga_solver_->boundary_dofs_(index_,0) == 0; ++index_);
+            return *this;
+        }
+        int operator*() const { return index_; }
+        friend bool operator!=(const boundary_dofs_iterator& lhs, const boundary_dofs_iterator& rhs) {
+            return lhs.index_ != rhs.index_;
+        }
+    };
+    boundary_dofs_iterator boundary_dofs_begin() const { return boundary_dofs_iterator(this, 0); }
+    boundary_dofs_iterator boundary_dofs_end() const { return boundary_dofs_iterator(this, n_dofs_); }
   
    protected:
     QuadratureRule integrator_ {};       // default to a quadrature rule which is exact for the considered FEM order
