@@ -56,6 +56,66 @@ inline double multicontract(const Tensor<double,N-J>& weights,const SVector<N,Te
         return multicontract<N,J+1>(weights.contract(part[J],Eigen::array<Eigen::IndexPair<int>,1>{}),part);
 };
 
+// this function gives a fast computation of several univariate splines, useful for pointwise evaluation of a single nurbs function
+// in principle this iterative approach is faster than recursive splines computation because it avoids overhead
+// from recursion and object allocation, and also because it avoid redundancy in evaluation of different splines
+template <int R>
+Tensor<double, 1> speval(double x, std::size_t idx, std::size_t ext, const DVector<double> & knots){
+
+    SVector<R, double> left;
+    SVector<R, double> right;
+
+    SVector<R+1, double> N;
+    N[0] = 1;
+
+    Tensor<double, 1> result(ext);
+    for(std::size_t j = 0; j < ext; ++j){
+        result(j) = 0;
+    }
+
+    std::size_t i = idx;
+    while(knots[i+1] <= x){
+        ++i;
+        if(i >= knots.rows()){
+            return result;
+        }
+    }
+
+    for(std::size_t j = 0; j < R; ++j){
+        left[j] = x - knots[i-j];
+        right[j] = knots[i+1+j] - x;
+    }
+
+    double s;
+    double t;
+    for(std::size_t j = 0; j < R; ++j){
+        s = 0;
+        for(std::size_t r = 0; r <= j; ++r){
+            t = N[r] / (right[r] + left[j-r]);
+            N[r] = s + right[r] * t;
+            s = left[j-r] * t;
+        }
+        N[j+1] = s;
+    }
+
+    std::size_t d;
+    if(i - idx >= R){
+        d = i - idx - R;
+        for(std::size_t j = 0; j < R+1 && j+d < ext; ++j){
+            result(j + d) = N[j];
+        }
+    }
+    else{
+        d = R + idx - i;
+        for(std::size_t j = d; j < R+1 && j - d < ext; ++j){
+            result(j - d) = N[j];
+        }
+    }
+
+    return result;
+
+}
+
 // this auxiliary class wraps a functor which evaluates the partial derivative of a NURBS object, in order to compute the gradient
 template <int M, int R> class NurbsDerivative : public VectorExpr<M,M,NurbsDerivative<M,R>> {
     private:
@@ -98,13 +158,9 @@ template <int M, int R> class NurbsDerivative : public VectorExpr<M,M,NurbsDeriv
         //and compute the NURBS numerator except the i-th spline
         for(std::size_t k=0; k<M; k++){
             //resize k-th tensor according to k-th weights dimension
-            spline_evaluation[k].resize(extents_[k]);
+            spline_evaluation[k] = speval<R>(x[k], minIdx_[k], extents_[k], knots_[k]);
             if(k!=i_){
                 num=num*Spline<R>(knots_[k], index_[k])(SVector<1>(x[k]));
-            }
-            //spline evaluation for k-th dimension
-            for(std::size_t j=0; j<extents_[k]; j++){
-                spline_evaluation[k](j)=Spline<R>(knots_[k], j+minIdx_[k])(SVector<1>(x[k]));
             }
         }
 
@@ -179,15 +235,11 @@ template <int M, int R> class NurbsSecondDerivative : public MatrixExpr<M,M,M,Nu
         //and compute the NURBS numerator except the i-th and j-th splines 
         for(std::size_t k=0; k<M; k++){
             //resize i-th tensor according to i-th weights dimension
-            spline_evaluation[k].resize(extents_[k]);
+            spline_evaluation[k] = speval<R>(x[k], minIdx_[k], extents_[k], knots_[k]);
             //numerator update
             //numerator derivatives update
             if(k!=i_ && k!=j_){
                 num=num*Spline<R>(knots_[k], index_[k])(SVector<1>(x[k]));
-            }
-            //spline evaluation for i-th dimension
-            for(std::size_t j=0; j<extents_[k]; j++){
-                spline_evaluation[k](j)=Spline<R>(knots_[k], j+minIdx_[k])(SVector<1>(x[k]));
             }
         }
 
@@ -217,9 +269,7 @@ template <int M, int R> class NurbsSecondDerivative : public MatrixExpr<M,M,M,Nu
             }
             den_der_ij = multicontract<M,0>(weights_,spline_evaluation);
             // replace back the i-th component splines
-            for(std::size_t k=0; k<extents_[i_]; k++){
-                spline_evaluation[i_](k)=Spline<R>(knots_[i_], k+minIdx_[i_])(SVector<1>(x[i_]));
-            }
+            spline_evaluation[i_] = speval<R>(x[i_], minIdx_[i_], extents_[i_], knots_[i_]);
             den_der_j = multicontract<M,0>(weights_,spline_evaluation);
         }
         else{
@@ -308,13 +358,10 @@ template <int M, int R> class Nurbs : public ScalarExpr<M,Nurbs<M,R>>{
         // and compute the NURBS numerator
         for(std::size_t i=0;i<M;i++){
             //resize i-th tensor according to i-th weights dimension
-            spline_evaluation[i].resize(extents_[i]);
+            spline_evaluation[i] = speval<R>(x[i], minIdx_[i], extents_[i], knots_[i]);
             //numerator update
             num=num*Spline<R>(knots_[i], index_[i])(SVector<1>(x[i]));
             //spline evaluation for i-th dimension
-            for(std::size_t j=0; j<extents_[i]; j++){
-                spline_evaluation[i](j)=Spline<R>(knots_[i], j+minIdx_[i])(SVector<1>(x[i]));
-            }
         }
         // avoid division by 0
         if(num == 0)
