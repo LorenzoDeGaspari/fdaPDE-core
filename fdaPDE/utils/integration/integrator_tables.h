@@ -323,6 +323,42 @@ template <> struct IntegratorTable<2, 4, GaussLegendre> {
     };
 };
 
+// 2D quad elements
+// reference element: square made from cartesian product (-1,1)x(-1,1) 
+
+// 9 point formula, degree of precision 5
+template <> struct IntegratorTable<2, 9, GaussLegendre> {
+    enum {
+        input_dim = 2,  // input space dimension of integrand field
+        num_nodes = 9  // number of quadrature nodes
+    };
+    // position of nodes (in cartesian coordinates)
+    std::array<SVector<2>, 9> nodes = {
+        SVector<2>(-0.7745966692414835, -0.7745966692414835),
+        SVector<2>(-0.7745966692414835,  0.0000000000000000),
+        SVector<2>(-0.7745966692414835,  0.7745966692414835),
+        SVector<2>( 0.0000000000000000, -0.7745966692414835),
+        SVector<2>( 0.0000000000000000,  0.0000000000000000),
+        SVector<2>( 0.0000000000000000,  0.7745966692414835),
+        SVector<2>( 0.7745966692414835, -0.7745966692414835),
+        SVector<2>( 0.7745966692414835,  0.0000000000000000),
+        SVector<2>( 0.7745966692414835,  0.7745966692414835)
+    };
+    // weights of the quadrature rule
+    std::array<double, 9> weights = {
+        0.3086419753086420,
+        0.4938271604938272,
+        0.3086419753086420,
+        0.4938271604938272,
+        0.7901234567901235,
+        0.4938271604938272,
+        0.3086419753086420,
+        0.4938271604938272,
+        0.3086419753086420
+    };
+};
+
+
 // 4 point formula, degree of precision 3
 template <> struct IntegratorTable<3, 27, GaussLegendre> {
     enum {
