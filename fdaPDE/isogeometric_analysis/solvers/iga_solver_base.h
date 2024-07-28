@@ -77,17 +77,15 @@ template <typename D, typename E, typename F, typename... Ts> class IGASolverBas
         // fetch next boundary dof
         boundary_dofs_iterator& operator++() {
             index_++;
-            // scan until all nodes have been visited or a boundary node is not found
-            for (; index_ < iga_solver_->n_dofs_ && iga_solver_->boundary_dofs_(index_,0) == 0; ++index_);
             return *this;
         }
-        int operator*() const { return index_; }
+        int operator*() const { return iga_solver_->boundary_dofs_(index_); }
         friend bool operator!=(const boundary_dofs_iterator& lhs, const boundary_dofs_iterator& rhs) {
             return lhs.index_ != rhs.index_;
         }
     };
     boundary_dofs_iterator boundary_dofs_begin() const { return boundary_dofs_iterator(this, 0); }
-    boundary_dofs_iterator boundary_dofs_end() const { return boundary_dofs_iterator(this, n_dofs_); }
+    boundary_dofs_iterator boundary_dofs_end() const { return boundary_dofs_iterator(this, boundary_dofs_.rows()); }
   
    protected:
     QuadratureRule integrator_ {};       // default to a quadrature rule which is exact for the considered FEM order

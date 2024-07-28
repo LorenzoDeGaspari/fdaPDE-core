@@ -25,6 +25,7 @@
 #include "isogeometric_analysis/operators/advection.h"
 #include "isogeometric_analysis/operators/reaction.h"
 #include "isogeometric_analysis/operators/laplace_beltrami.h"
+#include "isogeometric_analysis/operators/diffusion.h"
 #include "isogeometric_analysis/iga_assembler.h"
 #include "isogeometric_analysis/solvers/iga_linear_elliptic_solver.h"
 #include "isogeometric_analysis/solvers/iga_solver_selector.h"
