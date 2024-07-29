@@ -93,6 +93,7 @@ SpMatrix<double> Assembler<IGA, D, B, I>::discretize_operator(const E& op) {
     // TO DO find a way to not wrap with std::function
     ScalarField<M> g; // square root of determinant of metric tensor
     g = [F] (const SVector<M> & x) -> double { auto a = F(x); return std::sqrt((a.transpose()*a).determinant()); };
+
     DVector<double> f;
 
     // prepare buffer to be sent to bilinear form
@@ -155,6 +156,15 @@ SpMatrix<double> Assembler<IGA, D, B, I>::discretize_operator(const E& op) {
 template <typename D, typename B, typename I>
 template <typename F>
 DVector<double> Assembler<IGA, D, B, I>::discretize_forcing(const F& f) {
+    constexpr std::size_t M = D::local_dimension;
+    constexpr std::size_t N = D::embedding_dimension;
+    constexpr std::size_t R = B::order;
+    using JacobianType = typename D::DerivativeType;
+    JacobianType jac;
+    jac = mesh_.gradient();                // gradient of parametrization
+    ScalarField<M> g; // square root of determinant of metric tensor
+    g = [jac] (const SVector<M> & x) -> double { auto a = jac(x); return std::sqrt((a.transpose()*a).determinant()); };
+
     // allocate space for result vector
     DVector<double> discretization_vector {};
     discretization_vector.resize(dof_, 1);   // there are as many basis functions as degrees of freedom on the mesh
@@ -164,7 +174,7 @@ DVector<double> Assembler<IGA, D, B, I>::discretize_forcing(const F& f) {
     for (const auto& e : mesh_) {
         for (size_t i = 0; i < e.n_functions(); ++i) {
             // integrate \int_e [f*\nurb], exploit integral linearity
-            discretization_vector[e[i]] += integrator_.integrate(e, f, reference_basis_[e[i]]);
+            discretization_vector[e[i]] += integrator_.integrate(e, f, reference_basis_[e[i]], g);
         }
     }
     return discretization_vector;

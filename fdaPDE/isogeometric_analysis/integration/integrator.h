@@ -40,7 +40,7 @@ template <int M, int R, int K> class IntegratorIga {
     template <int N, typename F> double integrate(const MeshIga<M, N, R>& m, const F& f) const;
     // computes \int_e [f * \phi] where \phi is a basis function over the *reference element*.
     template <int N, typename F, typename B>
-    double integrate(const ElementIga<M, N, R>& e, const F& f, const B& phi) const;
+    double integrate(const ElementIga<M, N, R>& e, const F& f, const B& phi, const ScalarField<M> & g) const;
     // integrate the weak form of operator L to produce its (i,j)-th discretization matrix element
     template <typename L, int N, typename F> double integrate(const ElementIga<M, N, R>& e, F& f) const;
 
@@ -74,18 +74,18 @@ double IntegratorIga<M, R, K>::integrate(const ElementIga<M, N, R>& e, F& f) con
 // where J is the affine mapping from the reference element E to the physical element e
 template <int M, int R, int K>
 template <int N, typename F, typename B>
-double IntegratorIga<M, R, K>::integrate(const ElementIga<M, N, R>& e, const F& f, const B& Phi) const {
+double IntegratorIga<M, R, K>::integrate(const ElementIga<M, N, R>& e, const F& f, const B& Phi, const ScalarField<M> & g) const {
     double value = 0;
     for (size_t iq = 0; iq < integration_table_.num_nodes; ++iq) {
         const SVector<M>& x = e.affine_map(integration_table_.nodes[iq]);
         if constexpr (std::is_base_of<ScalarExpr<N, F>, F>::value) {
             // functor f is evaluable at any point.
             SVector<N> Jx = e.parametrization()(x);   // map quadrature point on physical element e
-            value += (f(Jx) * Phi(x)) * integration_table_.weights[iq];
+            value += (f(Jx) * Phi(x) * g(x)) * integration_table_.weights[iq];
         } else {
             // as a fallback we assume f given as vector of values with the assumption that
             // f[integration_table_.num_nodes*e.ID() + iq] equals the discretized field at the iq-th quadrature node.
-            value += (f(integration_table_.num_nodes * e.ID() + iq, 0) * Phi(x)) * integration_table_.weights[iq];
+            value += (f(integration_table_.num_nodes * e.ID() + iq, 0) * Phi(x) * g(x)) * integration_table_.weights[iq];
         }
     }
     // correct for measure of domain (element e)
