@@ -39,7 +39,7 @@ template <typename T> class Advection<IGA, T> : public DifferentialExpr<Advectio
     T b_;   // transport vector (either constant or space-varying)
    public:
     enum {
-        is_space_varying = std::is_base_of<VectorBase, T> ::value,
+        is_space_varying = true,
         is_symmetric = false
     };
 

@@ -38,7 +38,7 @@ template <typename T> class Diffusion<IGA, T> : public DifferentialExpr<Diffusio
     T K_;   // diffusion tensor (either constant or space-varying)
    public:
     enum {
-        is_space_varying = std::is_base_of<MatrixBase, T> ::value,
+        is_space_varying = true,
         is_symmetric = true
     };
 

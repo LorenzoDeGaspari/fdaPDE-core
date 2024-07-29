@@ -80,19 +80,27 @@ SpMatrix<double> Assembler<IGA, D, B, I>::discretize_operator(const E& op) {
     
     JacobianType F;
     F = mesh_.gradient();                // gradient of parametrization
+
     // InvG
-    // TO DO find a way to not wrap with std::function
-    MatrixField<M,M,M> InvG; // Inverse of the metric tensor
-    for(std::size_t i = 0; i < M; ++i){
+    DMatrix<double> qn = integrator_.quadrature_nodes(mesh_);
+    DMatrix<double, Eigen::RowMajor> invg_data;
+    DMatrix<double, Eigen::RowMajor> g_data;
+    invg_data.resize(integrator_.num_nodes() * mesh_.n_elements() * M * M, 1);
+    g_data.resize(integrator_.num_nodes() * mesh_.n_elements(), 1);
+    for (std::size_t i = 0; i < qn.rows(); ++i) {
+        auto tmp = F(qn.row(i));
+        auto tmp1 = tmp.transpose() * tmp;
+        auto tmp2 = tmp1.inverse();
+        auto tmp3 = std::sqrt(tmp1.determinant());
         for(std::size_t j = 0; j < M; ++j){
-            InvG(i,j) = [F,i,j] (const SVector<M> & x) -> double { auto a = F(x);  return (a.transpose()*a).inverse()(i,j);};
+            for(std::size_t k = 0; k < M; ++k){
+                invg_data( (i * M + j) * M + k) = tmp2(j,k);
+            }
         }
+        g_data(i) = tmp3;
     }
-    
-    // g
-    // TO DO find a way to not wrap with std::function
-    ScalarField<M> g; // square root of determinant of metric tensor
-    g = [F] (const SVector<M> & x) -> double { auto a = F(x); return std::sqrt((a.transpose()*a).determinant()); };
+    MatrixDataWrapper<M,M,M> InvG(invg_data);
+    ScalarDataWrapper<M> g(g_data);
 
     DVector<double> f;
 

@@ -38,7 +38,7 @@ template <typename T> class Reaction<IGA, T> : public DifferentialExpr<Reaction<
     T c_;   // reaction term
    public:
     enum {
-        is_space_varying = std::is_base_of<ScalarBase, T> ::value,
+        is_space_varying = true,
         is_symmetric = true
     };
 

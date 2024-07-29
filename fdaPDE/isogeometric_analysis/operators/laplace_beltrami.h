@@ -29,7 +29,7 @@ namespace core {
 // laplacian operator (isotropic and stationary diffusion)
 template <> struct LaplaceBeltrami<IGA> : public DifferentialExpr<LaplaceBeltrami<IGA>> {
     enum {
-        is_space_varying = false,
+        is_space_varying = true,
         is_symmetric = true
     };
 

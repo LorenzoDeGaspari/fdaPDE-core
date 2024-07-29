@@ -81,6 +81,7 @@ double IntegratorIga<M, R, K>::integrate(const ElementIga<M, N, R>& e, const F& 
         if constexpr (std::is_base_of<ScalarExpr<N, F>, F>::value) {
             // functor f is evaluable at any point.
             SVector<N> Jx = e.parametrization()(x);   // map quadrature point on physical element e
+            g.forward(integration_table_.num_nodes * e.ID() + iq);
             value += (f(Jx) * Phi(x) * g(x)) * integration_table_.weights[iq];
         } else {
             // as a fallback we assume f given as vector of values with the assumption that
