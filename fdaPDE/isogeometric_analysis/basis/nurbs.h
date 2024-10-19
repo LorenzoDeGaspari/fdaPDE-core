@@ -76,9 +76,6 @@ Tensor<double, 1> speval(double x, std::size_t idx, std::size_t ext, const DVect
     std::size_t i = idx;
     while(knots[i+1] <= x){
         ++i;
-        if(i >= knots.rows()){
-            return result;
-        }
     }
 
     for(std::size_t j = 0; j < R; ++j){
@@ -360,7 +357,8 @@ template <int M, int R> class Nurbs : public ScalarExpr<M,Nurbs<M,R>>{
             //resize i-th tensor according to i-th weights dimension
             spline_evaluation[i] = speval<R>(x[i], minIdx_[i], extents_[i], knots_[i]);
             //numerator update
-            num=num*Spline<R>(knots_[i], index_[i])(SVector<1>(x[i]));
+            //num=num*Spline<R>(knots_[i], index_[i])(SVector<1>(x[i]));
+            num *= spline_evaluation[i](index_[i] - minIdx_[i]);
             //spline evaluation for i-th dimension
         }
         // avoid division by 0

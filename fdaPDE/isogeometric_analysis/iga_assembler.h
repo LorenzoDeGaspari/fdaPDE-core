@@ -120,7 +120,6 @@ SpMatrix<double> Assembler<IGA, D, B, I>::discretize_operator(const E& op) {
       // update elements related informations
       current_id = e.ID(); // element ID
       
-      // TO DO
       if(!is_empty(f_)) // should be bypassed in case of linear operators via an if constexpr!!!
 	    for(std::size_t dof = 0; dof < n_basis; dof++) { f[dof] = f_[dof]; } 
 
@@ -170,8 +169,17 @@ DVector<double> Assembler<IGA, D, B, I>::discretize_forcing(const F& f) {
     using JacobianType = typename D::DerivativeType;
     JacobianType jac;
     jac = mesh_.gradient();                // gradient of parametrization
-    ScalarField<M> g; // square root of determinant of metric tensor
-    g = [jac] (const SVector<M> & x) -> double { auto a = jac(x); return std::sqrt((a.transpose()*a).determinant()); };
+
+    DMatrix<double> qn = integrator_.quadrature_nodes(mesh_);
+    DMatrix<double, Eigen::RowMajor> g_data;
+    g_data.resize(integrator_.num_nodes() * mesh_.n_elements(), 1);
+    for (std::size_t i = 0; i < qn.rows(); ++i) {
+        auto tmp = jac(qn.row(i));
+        auto tmp1 = tmp.transpose() * tmp;
+        auto tmp2 = std::sqrt(tmp1.determinant());
+        g_data(i) = tmp2;
+    }
+    ScalarDataWrapper<M> g(g_data);
 
     // allocate space for result vector
     DVector<double> discretization_vector {};

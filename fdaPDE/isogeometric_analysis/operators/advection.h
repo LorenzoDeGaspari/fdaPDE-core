@@ -49,7 +49,6 @@ template <typename T> class Advection<IGA, T> : public DifferentialExpr<Advectio
     // provides the operator's weak form
     template <typename... Args> auto integrate(const std::tuple<Args...>& mem_buffer) const {
         IMPORT_IGA_MEM_BUFFER_SYMBOLS(mem_buffer);
-        // TO FIX does not work with matrix matrix product
         return nurb_i * (F* (InvG* nabla_nurb_j)).dot(b_)*g;   // \nurb_i.dot(F*\InvG*\nabla \nurb_j)*\g
     }
 };

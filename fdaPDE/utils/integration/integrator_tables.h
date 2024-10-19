@@ -56,6 +56,44 @@ struct standard_fem_quadrature_rule {
     static constexpr int K = quadrature(N, R);
 };
 
+// trait for selecting a standard quadrature rule for isogeometric analysis, in case K is not supplied
+template <int M, int R>
+struct standard_iga_quadrature_rule {
+    static constexpr int quadrature(const int dim, const int order) {
+        switch (dim) {
+        case 1:   // 1D elements
+            switch (order) {
+            case 1:         // linear b splines
+                return 2;   // 2 point rule
+            case 2:         // quadratic b splines
+                return 3;   // 3 point rule
+            default:
+                return 3;
+            }
+        case 2:   // 2D elements
+            switch (order) {
+            case 1:         // linear b splines
+                return 4;   // 4 point rule
+            case 2:         // quadratic b splines
+                return 9;   // 9 point rule
+            default:
+                return 9;
+            }
+        case 3:   // 3D elements
+            switch (order) {
+            case 1:         // linear b splines
+                return 8;   // 8 point rule
+            case 2:         // quadratic b splines
+                return 27;   // 27 point rule
+            default:
+                return 27;
+            }
+        }
+        return 0;   // error
+    }
+    static constexpr int K = quadrature(M, R);
+};
+
 // 1D linear elements (gaussian integration)
 // reference element: simplex of vertices (0), (1)
 

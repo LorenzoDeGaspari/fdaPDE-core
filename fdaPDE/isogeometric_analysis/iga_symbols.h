@@ -23,7 +23,7 @@ namespace core {
 // Isogeometric strategy tag for PDE discretization
 struct IGA { };
 
-// utility macro to import symbols from memory buffer recived from assembly loop to iga operators
+// utility macro to import symbols from memory buffer received from assembly loop to iga operators
 #define IMPORT_IGA_MEM_BUFFER_SYMBOLS(mem_buff)                                                                         \
     /* pair of nurbs basis functions \psi_i, \psi_j*/                                                                   \
     auto nurb_i = std::get<0>(mem_buff);                                                                                \

@@ -28,7 +28,7 @@ template <int M, int N, int R>
 class ParametrizationDerivative : MatrixExpr<M,N,M,ParametrizationDerivative<M,N,R>>{
 
     private:
-        NurbsBasis<M,R> basis_;
+        NurbsBasis<M,R> basis_; // scalar nurbs basis
         Tensor<double,M> control_points_; // tensor of the control points coordinate (for each weight there is a N-dimensional control point)
         std::size_t j_; // direction along which to take the derivative
 
@@ -57,7 +57,7 @@ template <int M, int N, int R>
 class MeshParametrization : VectorExpr<M,N,MeshParametrization<M,N,R>>{
 
     private:
-        NurbsBasis<M,R> basis_;
+        NurbsBasis<M,R> basis_; // scalar nurbs basis
         Tensor<double,M> control_points_; // tensor of the control points coordinate (for each weight there is a N-dimensional control point)
 
     public:

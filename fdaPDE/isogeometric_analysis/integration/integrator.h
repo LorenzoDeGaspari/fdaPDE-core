@@ -28,7 +28,7 @@ namespace core {
 
 // A set of utilities to perform numerical integration
 // M: dimension of the domain of integration, R nurbs order, K number of quadrature nodes
-template <int M, int R, int K> class IntegratorIga {
+template <int M, int R, int K = standard_iga_quadrature_rule(M, R)> class IntegratorIga {
    private:
     IntegratorTable<M, K, GaussLegendre> integration_table_;
    public:
@@ -39,8 +39,8 @@ template <int M, int R, int K> class IntegratorIga {
     // integrate a callable F over a triangualtion m
     template <int N, typename F> double integrate(const MeshIga<M, N, R>& m, const F& f) const;
     // computes \int_e [f * \phi] where \phi is a basis function over the *reference element*.
-    template <int N, typename F, typename B>
-    double integrate(const ElementIga<M, N, R>& e, const F& f, const B& phi, const ScalarField<M> & g) const;
+    template <int N, typename F, typename B, typename G>
+    double integrate(const ElementIga<M, N, R>& e, const F& f, const B& phi, G& g) const;
     // integrate the weak form of operator L to produce its (i,j)-th discretization matrix element
     template <typename L, int N, typename F> double integrate(const ElementIga<M, N, R>& e, F& f) const;
 
@@ -73,8 +73,8 @@ double IntegratorIga<M, R, K>::integrate(const ElementIga<M, N, R>& e, F& f) con
 // variables formula: \int_e [f(x) * \phi(x)] = \int_{E} [f(J(X)) * \Phi(X)] |detJ|
 // where J is the affine mapping from the reference element E to the physical element e
 template <int M, int R, int K>
-template <int N, typename F, typename B>
-double IntegratorIga<M, R, K>::integrate(const ElementIga<M, N, R>& e, const F& f, const B& Phi, const ScalarField<M> & g) const {
+template <int N, typename F, typename B, typename G>
+double IntegratorIga<M, R, K>::integrate(const ElementIga<M, N, R>& e, const F& f, const B& Phi, G & g) const {
     double value = 0;
     for (size_t iq = 0; iq < integration_table_.num_nodes; ++iq) {
         const SVector<M>& x = e.affine_map(integration_table_.nodes[iq]);
@@ -86,6 +86,7 @@ double IntegratorIga<M, R, K>::integrate(const ElementIga<M, N, R>& e, const F& 
         } else {
             // as a fallback we assume f given as vector of values with the assumption that
             // f[integration_table_.num_nodes*e.ID() + iq] equals the discretized field at the iq-th quadrature node.
+            g.forward(integration_table_.num_nodes * e.ID() + iq);
             value += (f(integration_table_.num_nodes * e.ID() + iq, 0) * Phi(x) * g(x)) * integration_table_.weights[iq];
         }
     }
