@@ -21,6 +21,7 @@
 #include "../fem_symbols.h"
 #include "fem_linear_elliptic_solver.h"
 #include "fem_linear_parabolic_solver.h"
+#include "../../pde.h"
 
 namespace fdapde {
 namespace core {

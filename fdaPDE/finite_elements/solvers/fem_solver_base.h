@@ -28,6 +28,7 @@
 #include "../fem_assembler.h"
 #include "../fem_symbols.h"
 #include "../operators/reaction.h"   // for mass-matrix computation
+#include <set>
 
 namespace fdapde {
 namespace core {

@@ -157,14 +157,14 @@ template <int M, int R> class NurbsDerivative : public VectorExpr<M,M,NurbsDeriv
             //resize k-th tensor according to k-th weights dimension
             spline_evaluation[k] = speval<R>(x[k], minIdx_[k], extents_[k], knots_[k]);
             if(k!=i_){
-                num=num*Spline<R>(knots_[k], index_[k])(SVector<1>(x[k]));
+                num *= spline_evaluation[k](index_[k] - minIdx_[k]);
             }
         }
 
         // the derivative of the numerator is obtained by substituting the i-th spline by its derivative
         num_derived=num*Spline<R>(knots_[i_], index_[i_]).template derive<1>()(SVector<1>(x[i_]));
         // the actual numerator is just multiplied by the spline value
-        num = num*Spline<R>(knots_[i_], index_[i_])(SVector<1>(x[i_]));
+        num*=spline_evaluation[i_](index_[i_] - minIdx_[i_]);
 
         if(num == 0 && num_derived == 0)
             return 0;
