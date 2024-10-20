@@ -42,6 +42,9 @@ struct testData{
         DMatrix<double> solution_;
         std::size_t assembler_time_;
         std::size_t solver_time_;
+        double err_L2;
+        double err_L_inf;
+        double err_H1;
 
         testData(std::string name, std::size_t ref_n, std::string kx_filename, std::string ky_filename,
             std::string weights_filename, std::string cpx_filename, std::string cpy_filename)
@@ -51,6 +54,7 @@ struct testData{
 };
 
 void solve_problem(testData & test);
+void post_processing(std::vector<testData> & all_test);
 std::size_t dbg_cnt = 0;
 void deb(){
     std::cout << dbg_cnt++ << "\n";
@@ -70,12 +74,13 @@ int main(){
     testData test_ref3("Refinement 3", 324, "data/quad_kx_ref3.mtx", "data/quad_ky_ref3.mtx",
                        "data/quad_weights_ref3.mtx", "data/quad_cpx_ref3.mtx", "data/quad_cpy_ref3.mtx");
 
-    std::vector<testData> all_tests({test_ref0, test_ref1, test_ref2, test_ref3});
+    std::vector<testData> all_tests({test_ref0, test_ref1, test_ref2 ,test_ref3});
 
-    for(auto test : all_tests){
-        solve_problem(test);
+    for(std::size_t i = 0; i < all_tests.size(); ++i){
+        solve_problem(all_tests[i]);
     }
 
+    post_processing(all_tests);
     return 0;
 }
 
@@ -140,7 +145,7 @@ void solve_problem(testData & test){
     fdapde::core::Diffusion <fdapde::core::IGA, decltype(coeff)> K(coeff);
     
     // wrap forcing term in a scalar field
-    auto f = [] (const SVector<2> & x) -> double { return sin(2*M_PI*x[0]) * (4*M_PI*M_PI*x[1]*x[1] - 4*M_PI*M_PI*x[1]-2);};
+    auto f = [] (const SVector<2> & x) -> double { return sin(2*M_PI*x[1]) * (4*M_PI*M_PI*x[0]*x[0] - 4*M_PI*M_PI*x[0]-2);};
     fdapde::core::ScalarField<2> ff;
     ff = f;
 
@@ -158,14 +163,90 @@ void solve_problem(testData & test){
     const auto t_ass = std::chrono::high_resolution_clock::now();
     // solve the problem
     pde_r0.solve();
+    //std::cout << "Solver succes? " << pde_r0.solution() << "\n\n";
     const auto t_sol = std::chrono::high_resolution_clock::now();
 
     test.assembler_time_ = (std::chrono::duration_cast<std::chrono::milliseconds>(t_ass-t0)).count();
     test.solver_time_ = (std::chrono::duration_cast<std::chrono::microseconds>(t_sol-t_ass)).count();
+    test.solution_ = pde_r0.solution();
 
+    double val = 0.;
+    double val_x = 0.;
+    double val_y = 0.;
+    double uex_L2 = 0.;
+    double uex_L_inf = 0.;
+    double uex_H1 = 0.;
+    test.err_L2 = 0.;
+    test.err_L_inf = 0.;
+    test.err_H1 = 0.;
+
+    DMatrix<double> qn = pde_r0.quadrature_nodes();
+    // exact solution and its partial derivative
+    auto uex = [] (const SVector<2> & x) -> double {return sin(2*M_PI*x[0])*x[1]*(1-x[1]);};
+    auto uex_dx = [] (const SVector<2> & x) -> double {return -2*M_PI*cos(2*M_PI*x[0])*x[1]*(1-x[1]);};
+    auto uex_dy = [] (const SVector<2> & x) -> double {return -sin(2*M_PI*x[0])*(1-2*x[1]);};
+    
+    // for each quadrature node...
+    for (std::size_t i = 0; i < qn.rows(); ++i){
+        val = 0.;
+        val_x = 0.;
+        val_y = 0.;
+
+        for (std::size_t k = 0; k < mesh.basis().size(); k++){
+            /*std::size_t k1= k/weights.dimension(0);
+            std::size_t k2 = k%weights.dimension(0);*/
+            val += pde_r0.solution()(k) * mesh.basis()[k](SVector<2>(qn.row(i)));
+            val_x += pde_r0.solution()(k) * mesh.basis()[k].derive()[0](SVector<2>(qn.row(i)));
+            val_y += pde_r0.solution()(k) * mesh.basis()[k].derive()[1](SVector<2>(qn.row(i)));
+        }
+
+        //std::cout << val << " " << uex(qn.row(i)) << "\n";
+
+        val -= uex(qn.row(i));
+        val_x -= uex_dx(qn.row(i));
+        val_y -= uex_dy(qn.row(i));
+
+        test.err_L2 += val*val;
+        test.err_L_inf = std::abs(val) > test.err_L_inf ? std::abs(val) : test.err_L_inf;
+        test.err_H1 += val_x*val_x + val_y*val_y;
+
+        uex_L2 += uex(qn.row(i))*uex(qn.row(i)); 
+        uex_L_inf = std::abs(uex(qn.row(i))) > uex_L_inf ? std::abs(uex(qn.row(i))): uex_L_inf;
+        uex_H1 += uex_dx(qn.row(i)) * uex_dx(qn.row(i)) + uex_dy(qn.row(i))* uex_dy(qn.row(i));
+
+    }
+
+    uex_L2 = std::sqrt(uex_L2);
+    uex_H1 = std::sqrt(uex_H1);
+
+    test.err_L2 = std::sqrt(test.err_L2)/uex_L2;
+    test.err_L_inf = test.err_L_inf/uex_L_inf;
+    test.err_H1 = std::sqrt(test.err_H1)/uex_H1;
+    
+    
     std::cout << "Test: " << test.name_ << "\n";
     std::cout << "Refinement: " << test.ref_n_ << "\n";
     std::cout << "Assembler: " << test.assembler_time_ << "ms\n";
     std::cout << "Solver: " << test.solver_time_ << "us\n";
+    std::cout << "Error L2 norm: " << test.err_L2 << "\n";
+    std::cout << "Error Linf norm: " << test.err_L_inf << "\n";
+    std::cout << "Error H1 norm: " << test.err_H1 << "\n";
 
+}
+
+void post_processing (std::vector<testData> & all_tests){
+    // Write data
+    std::vector <double> t_a_geo ({41.1777, 63.5782, 119.1836, 284.3072});
+    std::vector <double> t_s_geo ({211.940000000000, 26.1800000000000, 501.470000000000, 1489.54000000000});
+    std::ofstream file("time_results.dat");
+    file.width(15);
+    file<<"# ref_n\t t_a_fda\t t_a_geo\t t_s_fda\t t_s_geopde\n";
+    for(unsigned int i = 0; i < all_tests.size(); ++i)
+    {
+        file.width(15);
+        file << std::scientific<< all_tests[i].ref_n_ << "\t" << all_tests[i].assembler_time_ << "\t" 
+            << t_a_geo[i] << "\t" << all_tests[i].solver_time_ << "\t"
+            << t_s_geo[i] << "\t" << std::endl;
+    }
+    file.close();
 }
