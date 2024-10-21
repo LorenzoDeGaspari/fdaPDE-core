@@ -95,6 +95,8 @@ int main(){
 
 void solve_problem(testData & test){
 
+    std::cout << "Start test " << test.name_ << "\n";
+    std::cout << "Loading data from files...\n";
     // sparse matrix to read from market files
     SpMatrix<double> tmp_sp;
 
@@ -143,23 +145,29 @@ void solve_problem(testData & test){
             control_points(i,j,1) = tmp_sp.coeff(i,j);
         }
     }
-
+    std::cout << "DONE!\n";
+    std::cout << "Creating mesh object...\n";
     // create a mesh
     fdapde::core::MeshIga<2,2,2> mesh(knots, weights, control_points);
-
+    std::cout << "DONE!\n";
+    std::cout << "Creating operator object...\n";
     // create a diffusion operator
     Eigen::Matrix2d coeff;
     coeff(0,0) = coeff(1,1) = -1.;
     coeff(1,0) = coeff(0,1) = 0.;
     fdapde::core::Diffusion <fdapde::core::IGA, decltype(coeff)> K(coeff);
-    
+    std::cout << "DONE!\n";
+    std::cout << "Creating forcing term object...\n";
     // wrap forcing term in a scalar field
     auto f = [] (const SVector<2> & x) -> double { return sin(2*M_PI*x[0]) * (4*M_PI*M_PI*x[1]*x[1] - 4*M_PI*M_PI*x[1]-2);};
     fdapde::core::ScalarField<2> ff;
     ff = f;
-
+    std::cout << "DONE!\n";
+    std::cout << "Creating PDE object...\n";
     // create a pde object
     fdapde::core::PDE<decltype(mesh),decltype(K), decltype(ff), fdapde::core::IGA, fdapde::core::iga_order<2>> pde_r0(mesh,K,ff);
+    std::cout << "DONE!\n";
+    std::cout << "Assembling algebraic terms...";
     // dummy object for dirchlet bc (we only support homogeneous, but we pass from the PDE interface)
     DMatrix<double> d_bc;
     d_bc.resize(2,2);
@@ -170,15 +178,19 @@ void solve_problem(testData & test){
     // enforce strong boundary conditions
     pde_r0.set_dirichlet_bc(d_bc);
     const auto t_ass = std::chrono::high_resolution_clock::now();
+    std::cout << "DONE!\n";
+    std::cout << "Solving linear system...\n";
+    const auto t1 = std::chrono::high_resolution_clock::now();
     // solve the problem
     pde_r0.solve();
-
     const auto t_sol = std::chrono::high_resolution_clock::now();
+    std::cout << "DONE!\n";
 
     test.assembler_time_ = (std::chrono::duration_cast<std::chrono::milliseconds>(t_ass-t0)).count();
-    test.solver_time_ = (std::chrono::duration_cast<std::chrono::microseconds>(t_sol-t_ass)).count();
+    test.solver_time_ = (std::chrono::duration_cast<std::chrono::microseconds>(t_sol-t1)).count();
     test.solution_ = pde_r0.solution();
 
+    std::cout << "Computing error norms...\n";
     // to estimate our errors
     double val = 0.;
     double val_x = 0.;
@@ -280,11 +292,12 @@ void solve_problem(testData & test){
     test.err_L2_geopde_ = std::sqrt(sum_L2_geo)/uex_L2;
     test.err_L_inf_geopde_ = sum_Linf_geo/uex_L_inf;
     test.err_H1_geopde_ = std::sqrt(sum_H1_geo)/uex_H1;
-    
-    std::cout << "Test: " << test.name_ << "\n";
-    std::cout << "Refinement: " << test.ref_n_ << "\n";
-    std::cout << "Assembler: " << test.assembler_time_ << "ms\n";
-    std::cout << "Solver: " << test.solver_time_ << "us\n";
+    std::cout << "DONE!\n";
+    std::cout << "Results:\n";
+    std::cout << "Test name: " << test.name_ << "\n";
+    std::cout << "Refinement number: " << test.ref_n_ << "\n";
+    std::cout << "Assembler time: " << test.assembler_time_ << "ms\n";
+    std::cout << "Solver time: " << test.solver_time_ << "us\n";
     std::cout << "Error L2 norm: " << test.err_L2_ << "\n";
     std::cout << "Error Linf norm: " << test.err_L_inf_ << "\n";
     std::cout << "Error H1 norm: " << test.err_H1_ << "\n";
@@ -296,6 +309,7 @@ void solve_problem(testData & test){
 
 void post_processing (std::vector<testData> & all_tests, std::string  geopde_times_filename){
     // Write data
+    std::cout << "Starting postprocessing...\n";
     SpMatrix<double> geo_times;
     Eigen::loadMarket(geo_times, geopde_times_filename);
     std::ofstream file_t("time_results.dat");
@@ -306,12 +320,13 @@ void post_processing (std::vector<testData> & all_tests, std::string  geopde_tim
     for(unsigned int i = 0; i < all_tests.size(); ++i)
     {
         file_t << std::scientific<< all_tests[i].ref_n_ << "\t" << all_tests[i].assembler_time_ << "\t" 
-            << geo_times.coeff(0,i) << "\t" << all_tests[i].solver_time_ << "\t"
-            << geo_times.coeff(1,i)  << "\t" << std::endl;
+            << geo_times.coeff(0,i)*1e3 << "\t" << all_tests[i].solver_time_ << "\t"
+            << geo_times.coeff(1,i)*1e6  << "\t" << std::endl;
         file_err << std::scientific << all_tests[i].ref_n_ << "\t" << all_tests[i].err_L2_ << "\t" << all_tests[i].err_L2_geopde_
             << "\t" <<  all_tests[i].err_L_inf_ << "\t" << all_tests[i].err_L_inf_geopde_ << "\t" << all_tests[i].err_H1_
             << "\t" << all_tests[i].err_H1_geopde_ << "\t" << std::endl;
     }
     file_t.close();
     file_err.close();
+    std::cout << "DONE!\n";
 }

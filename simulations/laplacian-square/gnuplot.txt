@@ -1,6 +1,6 @@
 set logscale xy
 set xlabel "N_h"
-set ylabel "Assembler time"
+set ylabel "Assembler time [ms]"
 set format y "%3.1e"
 set format x "%3.1e"
 set term png
@@ -8,7 +8,7 @@ set output "outputs/Assembler_time.png"
 plot "time_results.dat" using 1:2 title "Assembler time Fda" ls 1 with lines, "time_results.dat" using 1:3 title "Assembler time Geo" ls 2 with lines
 set logscale xy
 set xlabel "N_h"
-set ylabel "Solver time"
+set ylabel "Solver time [us]"
 set format y "%3.1e"
 set format x "%3.1e"
 set term png
