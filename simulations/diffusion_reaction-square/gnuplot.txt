@@ -1,0 +1,40 @@
+set logscale xy
+set xlabel "N_h"
+set ylabel "Assembler time [ms]"
+set format y "%3.1e"
+set format x "%3.1e"
+set term png
+set output "outputs/Assembler_time.png"
+plot "time_results.dat" using 1:2 title "Assembler time Fda" ls 1 with lines, "time_results.dat" using 1:3 title "Assembler time Geo" ls 2 with lines
+set logscale xy
+set xlabel "N_h"
+set ylabel "Solver time [us]"
+set format y "%3.1e"
+set format x "%3.1e"
+set term png
+set output "outputs/Solver_time.png"
+plot "time_results.dat" using 1:4 title "Solver time Fda" ls 3 with lines, "time_results.dat" using 1:5 title "Solver time Geo" ls 4 with lines
+set logscale xy
+set xlabel "N_h"
+set ylabel "Relative L2 error norm"
+set format y "%3.1e"
+set format x "%3.1e"
+set term png
+set output "outputs/L2_error.png"
+plot "error_results.dat" using 1:2 title "L2 error norm Fda" ls 3 with lines, "error_results.dat" using 1:3 title "L2 error norm Geo" ls 4 with lines
+set logscale xy
+set xlabel "N_h"
+set ylabel "Relative Linf error norm"
+set format y "%3.1e"
+set format x "%3.1e"
+set term png
+set output "outputs/Linf_error.png"
+plot "error_results.dat" using 1:4 title "Linf error norm Fda" ls 3 with lines, "error_results.dat" using 1:5 title "Linf error norm Geo" ls 4 with lines
+set logscale xy
+set xlabel "N_h"
+set ylabel "Relative H1 error norm"
+set format y "%3.1e"
+set format x "%3.1e"
+set term png
+set output "outputs/H1_error.png"
+plot "error_results.dat" using 1:6 title "H1 error norm Fda" ls 3 with lines, "error_results.dat" using 1:7 title "H1 error norm Geo" ls 4 with lines
