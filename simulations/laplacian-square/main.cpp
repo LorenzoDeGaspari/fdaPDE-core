@@ -140,12 +140,12 @@ void solve_problem(testData & test){
 
     // create a diffusion operator
     Eigen::Matrix2d coeff;
-    coeff(0,0) = coeff(1,1) = 1.;
+    coeff(0,0) = coeff(1,1) = -1.;
     coeff(1,0) = coeff(0,1) = 0.;
     fdapde::core::Diffusion <fdapde::core::IGA, decltype(coeff)> K(coeff);
     
     // wrap forcing term in a scalar field
-    auto f = [] (const SVector<2> & x) -> double { return sin(2*M_PI*x[1]) * (4*M_PI*M_PI*x[0]*x[0] - 4*M_PI*M_PI*x[0]-2);};
+    auto f = [] (const SVector<2> & x) -> double { return sin(2*M_PI*x[0]) * (4*M_PI*M_PI*x[1]*x[1] - 4*M_PI*M_PI*x[1]-2);};
     fdapde::core::ScalarField<2> ff;
     ff = f;
 
@@ -176,53 +176,62 @@ void solve_problem(testData & test){
     double uex_L2 = 0.;
     double uex_L_inf = 0.;
     double uex_H1 = 0.;
-    test.err_L2 = 0.;
-    test.err_L_inf = 0.;
-    test.err_H1 = 0.;
+    double sum_L2 = 0.;
+    double sum_Linf = 0.;
+    double sum_H1 = 0.;
 
     DMatrix<double> qn = pde_r0.quadrature_nodes();
     // exact solution and its partial derivative
-    auto uex = [] (const SVector<2> & x) -> double {return sin(2*M_PI*x[0])*x[1]*(1-x[1]);};
+    auto uex = [] (const SVector<2> & x) -> double {return -sin(2*M_PI*x[0])*x[1]*(1-x[1]);};
     auto uex_dx = [] (const SVector<2> & x) -> double {return -2*M_PI*cos(2*M_PI*x[0])*x[1]*(1-x[1]);};
     auto uex_dy = [] (const SVector<2> & x) -> double {return -sin(2*M_PI*x[0])*(1-2*x[1]);};
+
+    
+    auto F = mesh.parametrization();
+    auto J = mesh.gradient();
     
     // for each quadrature node...
     for (std::size_t i = 0; i < qn.rows(); ++i){
+
+        auto p = qn.row(i);
+
         val = 0.;
         val_x = 0.;
         val_y = 0.;
 
         for (std::size_t k = 0; k < mesh.basis().size(); k++){
-            /*std::size_t k1= k/weights.dimension(0);
-            std::size_t k2 = k%weights.dimension(0);*/
-            val += pde_r0.solution()(k) * mesh.basis()[k](SVector<2>(qn.row(i)));
-            val_x += pde_r0.solution()(k) * mesh.basis()[k].derive()[0](SVector<2>(qn.row(i)));
-            val_y += pde_r0.solution()(k) * mesh.basis()[k].derive()[1](SVector<2>(qn.row(i)));
+            val += pde_r0.solution()(k) * mesh.basis()[k](p);
+            val_x += pde_r0.solution()(k) * mesh.basis()[k].derive()[0](p);
+            val_y += pde_r0.solution()(k) * mesh.basis()[k].derive()[1](p);
         }
 
-        //std::cout << val << " " << uex(qn.row(i)) << "\n";
+        auto x = F(p);
+        auto Jx = J(p);
 
-        val -= uex(qn.row(i));
-        val_x -= uex_dx(qn.row(i));
-        val_y -= uex_dy(qn.row(i));
+        double uex_val = uex(x);
+        double uex_dx_val = Jx(0,0) * uex_dx(x) + Jx(1,0) * uex_dy(x);
+        double uex_dy_val = Jx(0,1) * uex_dx(x) + Jx(1,1) * uex_dy(x);
 
-        test.err_L2 += val*val;
-        test.err_L_inf = std::abs(val) > test.err_L_inf ? std::abs(val) : test.err_L_inf;
-        test.err_H1 += val_x*val_x + val_y*val_y;
+        double diff = (val - uex_val);
+        double diff_dx = (val_x - uex_dx_val);
+        double diff_dy = (val_y - uex_dy_val);
 
-        uex_L2 += uex(qn.row(i))*uex(qn.row(i)); 
-        uex_L_inf = std::abs(uex(qn.row(i))) > uex_L_inf ? std::abs(uex(qn.row(i))): uex_L_inf;
-        uex_H1 += uex_dx(qn.row(i)) * uex_dx(qn.row(i)) + uex_dy(qn.row(i))* uex_dy(qn.row(i));
+        sum_L2 += diff * diff;
+        sum_Linf = (std::abs(diff) > sum_Linf) ? std::abs(diff) : sum_Linf;
+        sum_H1 += diff_dx * diff_dx + diff_dy * diff_dy;
+
+        uex_L2 += uex_val * uex_val; 
+        uex_L_inf = (std::abs(uex_val) > uex_L_inf) ? std::abs(uex_val): uex_L_inf;
+        uex_H1 += uex_dx_val * uex_dx_val + uex_dy_val * uex_dy_val;
 
     }
 
     uex_L2 = std::sqrt(uex_L2);
     uex_H1 = std::sqrt(uex_H1);
 
-    test.err_L2 = std::sqrt(test.err_L2)/uex_L2;
-    test.err_L_inf = test.err_L_inf/uex_L_inf;
-    test.err_H1 = std::sqrt(test.err_H1)/uex_H1;
-    
+    test.err_L2 = std::sqrt(sum_L2)/uex_L2;
+    test.err_L_inf = sum_Linf/uex_L_inf;
+    test.err_H1 = std::sqrt(sum_H1)/uex_H1;
     
     std::cout << "Test: " << test.name_ << "\n";
     std::cout << "Refinement: " << test.ref_n_ << "\n";
@@ -230,7 +239,7 @@ void solve_problem(testData & test){
     std::cout << "Solver: " << test.solver_time_ << "us\n";
     std::cout << "Error L2 norm: " << test.err_L2 << "\n";
     std::cout << "Error Linf norm: " << test.err_L_inf << "\n";
-    std::cout << "Error H1 norm: " << test.err_H1 << "\n";
+    std::cout << "Error H1 norm: " << test.err_H1 << "\n\n";
 
 }
 
