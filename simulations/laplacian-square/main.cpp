@@ -38,23 +38,28 @@ struct testData{
         std::string weights_filename_;
         std::string cpx_filename_;
         std::string cpy_filename_;
+        std::string solution_geopde_filename_;
         
         DMatrix<double> solution_;
         std::size_t assembler_time_;
         std::size_t solver_time_;
-        double err_L2;
-        double err_L_inf;
-        double err_H1;
+
+        double err_L2_;
+        double err_L_inf_;
+        double err_H1_;
+        double err_L2_geopde_;
+        double err_L_inf_geopde_;
+        double err_H1_geopde_;
 
         testData(std::string name, std::size_t ref_n, std::string kx_filename, std::string ky_filename,
-            std::string weights_filename, std::string cpx_filename, std::string cpy_filename)
+            std::string weights_filename, std::string cpx_filename, std::string cpy_filename, std::string geopde_sol_filename)
             : name_(name), ref_n_(ref_n), kx_filename_(kx_filename), ky_filename_(ky_filename), weights_filename_(weights_filename),
-              cpx_filename_(cpx_filename), cpy_filename_(cpy_filename) {};
+              cpx_filename_(cpx_filename), cpy_filename_(cpy_filename),  solution_geopde_filename_(geopde_sol_filename){};
 
 };
 
 void solve_problem(testData & test);
-void post_processing(std::vector<testData> & all_test);
+void post_processing(std::vector<testData> & all_test, std::string  geopde_times_filename);
 std::size_t dbg_cnt = 0;
 void deb(){
     std::cout << dbg_cnt++ << "\n";
@@ -63,16 +68,20 @@ void deb(){
 int main(){
     
     testData test_ref0("Refinement 0", 36, "data/quad_kx_ref0.mtx", "data/quad_ky_ref0.mtx",
-                       "data/quad_weights_ref0.mtx", "data/quad_cpx_ref0.mtx", "data/quad_cpy_ref0.mtx");
+                       "data/quad_weights_ref0.mtx", "data/quad_cpx_ref0.mtx",
+                       "data/quad_cpy_ref0.mtx", "data/quad_geopde_sol_36.mtx");
 
     testData test_ref1("Refinement 1", 64, "data/quad_kx_ref1.mtx", "data/quad_ky_ref1.mtx",
-                       "data/quad_weights_ref1.mtx", "data/quad_cpx_ref1.mtx", "data/quad_cpy_ref1.mtx");
+                       "data/quad_weights_ref1.mtx", "data/quad_cpx_ref1.mtx",
+                       "data/quad_cpy_ref1.mtx", "data/quad_geopde_sol_64.mtx");
 
     testData test_ref2("Refinement 2", 144, "data/quad_kx_ref2.mtx", "data/quad_ky_ref2.mtx",
-                       "data/quad_weights_ref2.mtx", "data/quad_cpx_ref2.mtx", "data/quad_cpy_ref2.mtx");
+                       "data/quad_weights_ref2.mtx", "data/quad_cpx_ref2.mtx",
+                       "data/quad_cpy_ref2.mtx", "data/quad_geopde_sol_144.mtx");
 
     testData test_ref3("Refinement 3", 324, "data/quad_kx_ref3.mtx", "data/quad_ky_ref3.mtx",
-                       "data/quad_weights_ref3.mtx", "data/quad_cpx_ref3.mtx", "data/quad_cpy_ref3.mtx");
+                       "data/quad_weights_ref3.mtx", "data/quad_cpx_ref3.mtx",
+                       "data/quad_cpy_ref3.mtx", "data/quad_geopde_sol_324.mtx");
 
     std::vector<testData> all_tests({test_ref0, test_ref1, test_ref2 ,test_ref3});
 
@@ -80,7 +89,7 @@ int main(){
         solve_problem(all_tests[i]);
     }
 
-    post_processing(all_tests);
+    post_processing(all_tests, "data/quad_geopde_times.mtx");
     return 0;
 }
 
@@ -163,13 +172,14 @@ void solve_problem(testData & test){
     const auto t_ass = std::chrono::high_resolution_clock::now();
     // solve the problem
     pde_r0.solve();
-    //std::cout << "Solver succes? " << pde_r0.solution() << "\n\n";
+
     const auto t_sol = std::chrono::high_resolution_clock::now();
 
     test.assembler_time_ = (std::chrono::duration_cast<std::chrono::milliseconds>(t_ass-t0)).count();
     test.solver_time_ = (std::chrono::duration_cast<std::chrono::microseconds>(t_sol-t_ass)).count();
     test.solution_ = pde_r0.solution();
 
+    // to estimate our errors
     double val = 0.;
     double val_x = 0.;
     double val_y = 0.;
@@ -180,45 +190,79 @@ void solve_problem(testData & test){
     double sum_Linf = 0.;
     double sum_H1 = 0.;
 
+    // to estimate geopde errors
+    double val_geo = 0.;
+    double val_x_geo = 0.;
+    double val_y_geo = 0.;
+    double uex_L2_geo = 0.;
+    double uex_L_inf_geo = 0.;
+    double uex_H1_geo = 0.;
+    double sum_L2_geo = 0.;
+    double sum_Linf_geo = 0.;
+    double sum_H1_geo = 0.;
+
+    // read geopde solution
+    SpMatrix<double> geo_sol;
+    Eigen::loadMarket(geo_sol, test.solution_geopde_filename_);
+
     DMatrix<double> qn = pde_r0.quadrature_nodes();
     // exact solution and its partial derivative
     auto uex = [] (const SVector<2> & x) -> double {return -sin(2*M_PI*x[0])*x[1]*(1-x[1]);};
     auto uex_dx = [] (const SVector<2> & x) -> double {return -2*M_PI*cos(2*M_PI*x[0])*x[1]*(1-x[1]);};
     auto uex_dy = [] (const SVector<2> & x) -> double {return -sin(2*M_PI*x[0])*(1-2*x[1]);};
 
-    
+    // needed to evaluate our solution on the physical domain
     auto F = mesh.parametrization();
     auto J = mesh.gradient();
     
     // for each quadrature node...
     for (std::size_t i = 0; i < qn.rows(); ++i){
 
+        // current point
         auto p = qn.row(i);
 
         val = 0.;
         val_x = 0.;
         val_y = 0.;
+        val_geo = 0.;
+        val_x_geo = 0.;
+        val_y_geo = 0.;
 
         for (std::size_t k = 0; k < mesh.basis().size(); k++){
             val += pde_r0.solution()(k) * mesh.basis()[k](p);
             val_x += pde_r0.solution()(k) * mesh.basis()[k].derive()[0](p);
             val_y += pde_r0.solution()(k) * mesh.basis()[k].derive()[1](p);
+            val_geo += geo_sol.coeff(k, 0) * mesh.basis()[k](p);
+            val_x_geo += geo_sol.coeff(k, 0) * mesh.basis()[k].derive()[0](p);
+            val_y_geo += geo_sol.coeff(k, 0) * mesh.basis()[k].derive()[1](p);
         }
 
         auto x = F(p);
         auto Jx = J(p);
 
+        // evaluation of exact solution and its partial derivatives
         double uex_val = uex(x);
         double uex_dx_val = Jx(0,0) * uex_dx(x) + Jx(1,0) * uex_dy(x);
         double uex_dy_val = Jx(0,1) * uex_dx(x) + Jx(1,1) * uex_dy(x);
 
+        // difference between our solution and exact one in the current point
         double diff = (val - uex_val);
         double diff_dx = (val_x - uex_dx_val);
         double diff_dy = (val_y - uex_dy_val);
 
+        // difference between geopde solution and exact one in the current point
+        double diff_geo = (val_geo - uex_val);
+        double diff_dx_geo = (val_x_geo - uex_dx_val);
+        double diff_dy_geo = (val_y_geo - uex_dy_val);
+
+        // update on sums
         sum_L2 += diff * diff;
         sum_Linf = (std::abs(diff) > sum_Linf) ? std::abs(diff) : sum_Linf;
         sum_H1 += diff_dx * diff_dx + diff_dy * diff_dy;
+
+        sum_L2_geo += diff_geo * diff_geo;
+        sum_Linf_geo = (std::abs(diff_geo) > sum_Linf_geo) ? std::abs(diff_geo) : sum_Linf_geo;
+        sum_H1_geo += diff_dx_geo * diff_dx_geo + diff_dy_geo * diff_dy_geo;
 
         uex_L2 += uex_val * uex_val; 
         uex_L_inf = (std::abs(uex_val) > uex_L_inf) ? std::abs(uex_val): uex_L_inf;
@@ -229,33 +273,45 @@ void solve_problem(testData & test){
     uex_L2 = std::sqrt(uex_L2);
     uex_H1 = std::sqrt(uex_H1);
 
-    test.err_L2 = std::sqrt(sum_L2)/uex_L2;
-    test.err_L_inf = sum_Linf/uex_L_inf;
-    test.err_H1 = std::sqrt(sum_H1)/uex_H1;
+    test.err_L2_ = std::sqrt(sum_L2)/uex_L2;
+    test.err_L_inf_ = sum_Linf/uex_L_inf;
+    test.err_H1_ = std::sqrt(sum_H1)/uex_H1;
+    
+    test.err_L2_geopde_ = std::sqrt(sum_L2_geo)/uex_L2;
+    test.err_L_inf_geopde_ = sum_Linf_geo/uex_L_inf;
+    test.err_H1_geopde_ = std::sqrt(sum_H1_geo)/uex_H1;
     
     std::cout << "Test: " << test.name_ << "\n";
     std::cout << "Refinement: " << test.ref_n_ << "\n";
     std::cout << "Assembler: " << test.assembler_time_ << "ms\n";
     std::cout << "Solver: " << test.solver_time_ << "us\n";
-    std::cout << "Error L2 norm: " << test.err_L2 << "\n";
-    std::cout << "Error Linf norm: " << test.err_L_inf << "\n";
-    std::cout << "Error H1 norm: " << test.err_H1 << "\n\n";
+    std::cout << "Error L2 norm: " << test.err_L2_ << "\n";
+    std::cout << "Error Linf norm: " << test.err_L_inf_ << "\n";
+    std::cout << "Error H1 norm: " << test.err_H1_ << "\n";
+    std::cout << "Error L2 norm geopde: " << test.err_L2_geopde_ << "\n";
+    std::cout << "Error Linf norm geopde: " << test.err_L_inf_geopde_ << "\n";
+    std::cout << "Error H1 norm geopde: " << test.err_H1_geopde_ << "\n\n";
 
 }
 
-void post_processing (std::vector<testData> & all_tests){
+void post_processing (std::vector<testData> & all_tests, std::string  geopde_times_filename){
     // Write data
-    std::vector <double> t_a_geo ({41.1777, 63.5782, 119.1836, 284.3072});
-    std::vector <double> t_s_geo ({211.940000000000, 26.1800000000000, 501.470000000000, 1489.54000000000});
-    std::ofstream file("time_results.dat");
-    file.width(15);
-    file<<"# ref_n\t t_a_fda\t t_a_geo\t t_s_fda\t t_s_geopde\n";
+    SpMatrix<double> geo_times;
+    Eigen::loadMarket(geo_times, geopde_times_filename);
+    std::ofstream file_t("time_results.dat");
+    std::ofstream file_err("error_results.dat");
+
+    file_t<<"# ref_n\t t_a_fda\t t_a_geo\t t_s_fda\t t_s_geo\n";
+    file_err<<"# ref_n\t err_l2_fda\t err_l2_geo\t err_linf_fda\t err_linf_geo\t err_H1_fda\t err_H1_geo\n";
     for(unsigned int i = 0; i < all_tests.size(); ++i)
     {
-        file.width(15);
-        file << std::scientific<< all_tests[i].ref_n_ << "\t" << all_tests[i].assembler_time_ << "\t" 
-            << t_a_geo[i] << "\t" << all_tests[i].solver_time_ << "\t"
-            << t_s_geo[i] << "\t" << std::endl;
+        file_t << std::scientific<< all_tests[i].ref_n_ << "\t" << all_tests[i].assembler_time_ << "\t" 
+            << geo_times.coeff(0,i) << "\t" << all_tests[i].solver_time_ << "\t"
+            << geo_times.coeff(1,i)  << "\t" << std::endl;
+        file_err << std::scientific << all_tests[i].ref_n_ << "\t" << all_tests[i].err_L2_ << "\t" << all_tests[i].err_L2_geopde_
+            << "\t" <<  all_tests[i].err_L_inf_ << "\t" << all_tests[i].err_L_inf_geopde_ << "\t" << all_tests[i].err_H1_
+            << "\t" << all_tests[i].err_H1_geopde_ << "\t" << std::endl;
     }
-    file.close();
+    file_t.close();
+    file_err.close();
 }
