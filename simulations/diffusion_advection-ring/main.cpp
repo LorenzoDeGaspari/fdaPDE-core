@@ -153,17 +153,26 @@ void solve_problem(testData & test){
     std::cout << "Creating operator object...\n";
     // create a diffusion-advection operator
     Eigen::Matrix2d coeff;
-    coeff(0,0) = coeff(1,1) = 0.1;
+    coeff(0,0) = coeff(1,1) = -10;
     coeff(1,0) = coeff(0,1) = 0.;
-    auto beta_x = [] (const SVector<2> & x) -> double {return x[0];};
-    auto beta_y = [] (const SVector<2> & x) -> double {return x[1];};
-    fdapde::core::VectorField<2,2> beta({beta_x, beta_y});
+
+    fdapde::core::IntegratorIga<2,2> itg;
+    DMatrix<double> qq = itg.quadrature_nodes(mesh);
+    DMatrix<double, Eigen::RowMajor> beta_data;
+    beta_data.resize(itg.num_nodes() * mesh.n_elements() * 2, 1);
+    for (std::size_t i = 0; i < qq.rows(); ++i) {
+        auto tmp = mesh.parametrization()(qq.row(i));
+        beta_data(2*i) = -tmp(0);
+        beta_data(2*i + 1) = -tmp(1);
+    }
+    fdapde::core::VectorDataWrapper<2,2> beta(beta_data);
+
     fdapde::core::Diffusion <fdapde::core::IGA, decltype(coeff)> K(coeff);
     fdapde::core::Advection <fdapde::core::IGA, decltype(beta)> A(beta);
     std::cout << "DONE!\n";
     std::cout << "Creating forcing term object...\n";
     // wrap forcing term in a scalar field
-    auto f = [] (const SVector<2> & x) -> double { return 0.8*x[0]*x[1]*(8*x[0]*x[0] + 8*x[1]*x[1] -15) +
+    auto f = [] (const SVector<2> & x) -> double { return 80*x[0]*x[1]*(8*x[0]*x[0] + 8*x[1]*x[1] -15) +
                                                    2*x[0]*x[1]*(6*x[0]*x[0]*x[0]*x[0] + 12*x[0]*x[0]*x[1]*x[1] -20*x[0]*x[0] -5*x[1]*x[1]
                                                    +6*x[1]*x[1]*x[1]*x[1] -20*x[1]*x[1] + 8);};
     fdapde::core::ScalarField<2> ff;
