@@ -43,7 +43,7 @@ template <typename D, typename E, typename F, typename... Ts> class IGASolverBas
     };
 
     typedef D DomainType;
-    typedef IntegratorIga<DomainType::local_dimension, iga_order, 4> QuadratureRule;
+    typedef IntegratorIga<DomainType::local_dimension, iga_order> QuadratureRule;
     typedef NurbsBasis<D::local_dimension,iga_order> FunctionBasis;
     typedef FunctionBasis FunctionSpace;
 

@@ -28,7 +28,7 @@ namespace core {
 
 // A set of utilities to perform numerical integration
 // M: dimension of the domain of integration, R nurbs order, K number of quadrature nodes
-template <int M, int R, int K = standard_iga_quadrature_rule(M, R)> class IntegratorIga {
+template <int M, int R, int K = standard_iga_quadrature_rule<M, R>::K> class IntegratorIga {
    private:
     IntegratorTable<M, K, GaussLegendre> integration_table_;
    public:
