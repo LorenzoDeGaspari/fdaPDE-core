@@ -41,8 +41,8 @@ struct testData{
         std::string solution_geopde_filename_;
         
         DMatrix<double> solution_;
-        std::size_t assembler_time_;
-        std::size_t solver_time_;
+        double assembler_time_;
+        double solver_time_;
 
         double err_L2_;
         double err_L_inf_;
@@ -50,6 +50,9 @@ struct testData{
         double err_L2_geopde_;
         double err_L_inf_geopde_;
         double err_H1_geopde_;
+        double diff_L2_;
+        double diff_L_inf_;
+        double diff_H1_;
 
         testData(std::string name, std::size_t ref_n, std::string kx_filename, std::string ky_filename,
             std::string weights_filename, std::string cpx_filename, std::string cpy_filename, std::string geopde_sol_filename)
@@ -121,11 +124,9 @@ void solve_problem(testData & test){
     Eigen::Tensor<double,2> weights(tmp_sp.rows(),tmp_sp.cols());
     for(std::size_t i = 0; i < tmp_sp.rows(); ++i){
         for(std::size_t j = 0; j < tmp_sp.cols(); ++j){
-            tmp_sp.coeffRef(i,j) = 1.;
             weights(i,j) = tmp_sp.coeff(i,j);
         }
     }
-    Eigen::saveMarket(tmp_sp, test.weights_filename_);
     
     // control points have the same dimensions as weights, plus a dimension for the axis (size 2: (x,y))
     Eigen::Tensor<double,3> control_points(tmp_sp.rows(),tmp_sp.cols(), 2);
@@ -138,7 +139,7 @@ void solve_problem(testData & test){
         }
     }
 
-    // load control points x coordinate
+    // load control points y coordinate
     Eigen::loadMarket(tmp_sp, test.cpy_filename_);
     for(std::size_t i = 0; i < tmp_sp.rows(); ++i){
         for(std::size_t j = 0; j < tmp_sp.cols(); ++j){
@@ -189,12 +190,12 @@ void solve_problem(testData & test){
     const auto t_sol = std::chrono::high_resolution_clock::now();
     std::cout << "DONE!\n";
 
-    test.assembler_time_ = (std::chrono::duration_cast<std::chrono::milliseconds>(t_ass-t0)).count();
-    test.solver_time_ = (std::chrono::duration_cast<std::chrono::microseconds>(t_sol-t1)).count();
+    test.assembler_time_ = (std::chrono::duration<double>(t_ass-t0)).count();
+    test.solver_time_ = (std::chrono::duration<double>(t_sol-t1)).count();
     test.solution_ = pde_r0.solution();
 
     std::cout << "Computing error norms...\n";
-    // to estimate our errors
+        // to estimate our errors
     double val = 0.;
     double val_x = 0.;
     double val_y = 0.;
@@ -209,12 +210,17 @@ void solve_problem(testData & test){
     double val_geo = 0.;
     double val_x_geo = 0.;
     double val_y_geo = 0.;
-    double uex_L2_geo = 0.;
-    double uex_L_inf_geo = 0.;
-    double uex_H1_geo = 0.;
+    double geo_L2 = 0.;
+    double geo_Linf = 0.;
+    double geo_H1 = 0.;
     double sum_L2_geo = 0.;
     double sum_Linf_geo = 0.;
     double sum_H1_geo = 0.;
+
+    // to estimate norm of the difference between our solution and geopde
+    double sum_L2_diff = 0.;
+    double sum_Linf_diff = 0.;
+    double sum_H1_diff = 0.;
 
     // read geopde solution
     SpMatrix<double> geo_sol;
@@ -270,6 +276,11 @@ void solve_problem(testData & test){
         double diff_dx_geo = (val_x_geo - uex_dx_val);
         double diff_dy_geo = (val_y_geo - uex_dy_val);
 
+        // difference between our solution and geopde one in the current point
+        double diff_diff = (val_geo - val);
+        double diff_diff_dx = (val_x_geo - val_x);
+        double diff_diff_dy = (val_y_geo - val_y);
+
         // update on sums
         sum_L2 += diff * diff;
         sum_Linf = (std::abs(diff) > sum_Linf) ? std::abs(diff) : sum_Linf;
@@ -279,34 +290,51 @@ void solve_problem(testData & test){
         sum_Linf_geo = (std::abs(diff_geo) > sum_Linf_geo) ? std::abs(diff_geo) : sum_Linf_geo;
         sum_H1_geo += diff_dx_geo * diff_dx_geo + diff_dy_geo * diff_dy_geo;
 
+        sum_L2_diff += diff_diff * diff_diff;
+        sum_Linf_diff = (std::abs(diff_diff) > sum_Linf_diff) ? std::abs(diff_diff): sum_Linf_diff;
+        sum_H1_diff += diff_diff_dx * diff_diff_dx + diff_diff_dy * diff_diff_dy;
+
+        // update on norms
         uex_L2 += uex_val * uex_val; 
         uex_L_inf = (std::abs(uex_val) > uex_L_inf) ? std::abs(uex_val): uex_L_inf;
         uex_H1 += uex_dx_val * uex_dx_val + uex_dy_val * uex_dy_val;
+
+        geo_L2 += val_geo * val_geo;
+        geo_Linf = (std::abs(val_geo) > geo_Linf) ? std::abs(val_geo): geo_Linf;
+        geo_H1 += val_x_geo * val_x_geo + val_y_geo * val_y_geo;
 
     }
 
     uex_L2 = std::sqrt(uex_L2);
     uex_H1 = std::sqrt(uex_H1);
+    geo_L2 = std::sqrt(geo_L2);
+    geo_H1 = std::sqrt(geo_H1);
 
     test.err_L2_ = std::sqrt(sum_L2)/uex_L2;
     test.err_L_inf_ = sum_Linf/uex_L_inf;
     test.err_H1_ = std::sqrt(sum_H1)/uex_H1;
-    
     test.err_L2_geopde_ = std::sqrt(sum_L2_geo)/uex_L2;
     test.err_L_inf_geopde_ = sum_Linf_geo/uex_L_inf;
     test.err_H1_geopde_ = std::sqrt(sum_H1_geo)/uex_H1;
+    test.diff_L2_ = std::sqrt(sum_L2_diff)/geo_L2;
+    test.diff_L_inf_ = sum_Linf_diff/geo_Linf;
+    test.diff_H1_ = std::sqrt(sum_H1_diff)/geo_H1;
+
     std::cout << "DONE!\n";
     std::cout << "Results:\n";
     std::cout << "Test name: " << test.name_ << "\n";
     std::cout << "Refinement number: " << test.ref_n_ << "\n";
-    std::cout << "Assembler time: " << test.assembler_time_ << "ms\n";
-    std::cout << "Solver time: " << test.solver_time_ << "us\n";
+    std::cout << "Assembler time: " << test.assembler_time_ << "s\n";
+    std::cout << "Solver time: " << test.solver_time_ << "s\n";
     std::cout << "Error L2 norm: " << test.err_L2_ << "\n";
     std::cout << "Error Linf norm: " << test.err_L_inf_ << "\n";
     std::cout << "Error H1 norm: " << test.err_H1_ << "\n";
-    std::cout << "Error L2 norm geopde: " << test.err_L2_geopde_ << "\n";
-    std::cout << "Error Linf norm geopde: " << test.err_L_inf_geopde_ << "\n";
-    std::cout << "Error H1 norm geopde: " << test.err_H1_geopde_ << "\n\n";
+    std::cout << "Error L2 norm GeoPDEs: " << test.err_L2_geopde_ << "\n";
+    std::cout << "Error Linf norm GeoPDEs: " << test.err_L_inf_geopde_ << "\n";
+    std::cout << "Error H1 norm GeoPDEs: " << test.err_H1_geopde_ << "\n";
+    std::cout << "fdaPDE-GeoPDEs difference L2 norm: " << test.diff_L2_ << "\n";
+    std::cout << "fdaPDE-GeoPDEs difference Linf norm: " << test.diff_L_inf_ << "\n";
+    std::cout << "fdaPDE-GeoPDEs difference H1 norm: " << test.diff_H1_ << "\n\n";
 
 }
 
@@ -319,15 +347,16 @@ void post_processing (std::vector<testData> & all_tests, std::string  geopde_tim
     std::ofstream file_err("error_results.dat");
 
     file_t<<"# ref_n\t t_a_fda\t t_a_geo\t t_s_fda\t t_s_geo\n";
-    file_err<<"# ref_n\t err_l2_fda\t err_l2_geo\t err_linf_fda\t err_linf_geo\t err_H1_fda\t err_H1_geo\n";
+    file_err<<"# ref_n\t err_l2_fda\t err_l2_geo\t err_linf_fda\t err_linf_geo\t err_H1_fda\t err_H1_geo\t diff_L2\t diff_linf\t diff_H1\n";
     for(unsigned int i = 0; i < all_tests.size(); ++i)
     {
         file_t << std::scientific<< all_tests[i].ref_n_ << "\t" << all_tests[i].assembler_time_ << "\t" 
-            << geo_times.coeff(0,i)*1e3 << "\t" << all_tests[i].solver_time_ << "\t"
-            << geo_times.coeff(1,i)*1e6  << "\t" << std::endl;
+            << geo_times.coeff(0,i) << "\t" << all_tests[i].solver_time_ << "\t"
+            << geo_times.coeff(1,i) << "\t" << std::endl;
         file_err << std::scientific << all_tests[i].ref_n_ << "\t" << all_tests[i].err_L2_ << "\t" << all_tests[i].err_L2_geopde_
             << "\t" <<  all_tests[i].err_L_inf_ << "\t" << all_tests[i].err_L_inf_geopde_ << "\t" << all_tests[i].err_H1_
-            << "\t" << all_tests[i].err_H1_geopde_ << "\t" << std::endl;
+            << "\t" << all_tests[i].err_H1_geopde_ << "\t" << all_tests[i].diff_L2_ << "\t" << all_tests[i].diff_L_inf_
+            << "\t" << all_tests[i].diff_H1_ << "\t" << std::endl;
     }
     file_t.close();
     file_err.close();
