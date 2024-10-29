@@ -42,8 +42,8 @@ struct testData{
         std::string solution_geopde_filename_;
         
         DMatrix<double> solution_;
-        std::size_t assembler_time_;
-        std::size_t solver_time_;
+        double assembler_time_;
+        double solver_time_;
 
         double err_L2_;
         double err_L_inf_;
@@ -121,11 +121,9 @@ void solve_problem(testData & test){
     Eigen::Tensor<double,2> weights(tmp_sp.rows(),tmp_sp.cols());
     for(std::size_t i = 0; i < tmp_sp.rows(); ++i){
         for(std::size_t j = 0; j < tmp_sp.cols(); ++j){
-            tmp_sp.coeffRef(i,j) = 1.;
             weights(i,j) = tmp_sp.coeff(i,j);
         }
     }
-    Eigen::saveMarket(tmp_sp, test.weights_filename_);
     
     // control points have the same dimensions as weights, plus a dimension for the axis (size 2: (x,y))
     Eigen::Tensor<double,3> control_points(tmp_sp.rows(),tmp_sp.cols(), 3);
@@ -202,8 +200,8 @@ void solve_problem(testData & test){
     const auto t_sol = std::chrono::high_resolution_clock::now();
     std::cout << "DONE!\n";
 
-    test.assembler_time_ = (std::chrono::duration_cast<std::chrono::milliseconds>(t_ass-t0)).count();
-    test.solver_time_ = (std::chrono::duration_cast<std::chrono::microseconds>(t_sol-t1)).count();
+    test.assembler_time_ = (std::chrono::duration<double>(t_ass-t0)).count();
+    test.solver_time_ = (std::chrono::duration<double>(t_sol-t1)).count();
     test.solution_ = pde_r0.solution();
 
     std::cout << "Computing error norms...\n";
@@ -281,11 +279,11 @@ void solve_problem(testData & test){
     std::cout << "Results:\n";
     std::cout << "Test name: " << test.name_ << "\n";
     std::cout << "Refinement number: " << test.ref_n_ << "\n";
-    std::cout << "Assembler time: " << test.assembler_time_ << "ms\n";
-    std::cout << "Solver time: " << test.solver_time_ << "us\n";
-    std::cout << "Error L2 norm: " << test.err_L2_ << "\n";
-    std::cout << "Error Linf norm: " << test.err_L_inf_ << "\n";
-    std::cout << "Error H1 norm: " << test.err_H1_ << "\n\n";
+    std::cout << "Assembler time: " << test.assembler_time_ << "s\n";
+    std::cout << "Solver time: " << test.solver_time_ << "s\n";
+    std::cout << "fdaPDE-GeoPDEs difference L2 norm: " << test.err_L2_ << "\n";
+    std::cout << "fdaPDE-GeoPDEs difference Linf norm: " << test.err_L_inf_ << "\n";
+    std::cout << "fdaPDE-GeoPDEs difference H1 norm: " << test.err_H1_<< "\n\n";
 
 }
 
@@ -302,8 +300,8 @@ void post_processing (std::vector<testData> & all_tests, std::string  geopde_tim
     for(unsigned int i = 0; i < all_tests.size(); ++i)
     {
         file_t << std::scientific<< all_tests[i].ref_n_ << "\t" << all_tests[i].assembler_time_ << "\t" 
-            << geo_times.coeff(0,i)*1e3 << "\t" << all_tests[i].solver_time_ << "\t"
-            << geo_times.coeff(1,i)*1e6  << "\t" << std::endl;
+            << geo_times.coeff(0,i) << "\t" << all_tests[i].solver_time_ << "\t"
+            << geo_times.coeff(1,i) << "\t" << std::endl;
         file_err << std::scientific << all_tests[i].ref_n_ << "\t" << all_tests[i].err_L2_ << "\t" << all_tests[i].err_L_inf_
             << "\t" <<  all_tests[i].err_H1_<< "\t" << std::endl;
     }
