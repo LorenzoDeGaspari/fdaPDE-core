@@ -12,16 +12,13 @@ done
 
 # cd into build directory
 BUILD_DIR=build/
-if [ -d "$BUILD_DIR" ];
-then
-    cd build/
-else
-    mkdir build/
-    cd build/
-fi
+mkdir -p build/
 
-cmake -Wno-dev ../CMakeLists.txt
+cmake -Wno-dev CMakeLists.txt
 make
+
+mv fdapde_test build/
+cd build/
 
 if [ "$valgrind_check" = true ]; then
     valgrind --leak-check=full --track-origins=yes ./fdapde_test
