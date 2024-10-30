@@ -44,7 +44,7 @@ class ParametrizationDerivative : MatrixExpr<M,N,M,ParametrizationDerivative<M,N
         inline double operator()(const SVector<M> & x) const {
             
             double res = 0.0;
-            for(auto nurb : basis_){
+            for(const auto & nurb : basis_){
                 res += nurb.derive()[j_](x) * control_points_(nurb.index());
             }
             return res;
@@ -72,7 +72,7 @@ class MeshParametrization : VectorExpr<M,N,MeshParametrization<M,N,R>>{
         inline double operator()(const SVector<M> & x) const {
             
             double res = 0.0;
-            for(auto nurb : basis_){
+            for(const auto & nurb : basis_){
                 res += nurb(x) * control_points_(nurb.index());
             }
             return res;

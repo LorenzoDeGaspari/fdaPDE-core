@@ -113,6 +113,7 @@ template <int M, int N, int R> class MeshIga{
         const VectorField<M, N, MeshParametrization<M,N,R>>& parametrization() const { return parametrization_; }
         const MatrixField<M,N,M,ParametrizationDerivative<M,N,R>>& gradient() const { return gradient_; }
         const NurbsBasis<M, R> & basis() const { return basis_; }
+        const Tensor<double,M+1> & control_points() const { return control_points_; }
 
         const ElementIga<M,N,R> & element(std::size_t ID) const { return elements_cache_[ID]; }
         ElementIga<M,N,R>& element(std::size_t ID) { return elements_cache_[ID]; }

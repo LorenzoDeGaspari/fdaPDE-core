@@ -30,6 +30,7 @@
 #include "basis/nurbs_basis.h"
 #include "mesh/mesh.h"
 #include "iga_symbols.h"
+#include <iostream>
 
 
 namespace fdapde {
@@ -85,10 +86,25 @@ SpMatrix<double> Assembler<IGA, D, B, I>::discretize_operator(const E& op) {
     DMatrix<double> qn = integrator_.quadrature_nodes(mesh_);
     DMatrix<double, Eigen::RowMajor> invg_data;
     DMatrix<double, Eigen::RowMajor> g_data;
+    Eigen::Matrix<double, N, M> tmp;
+    Eigen::Tensor<double, M> cpchip;
     invg_data.resize(integrator_.num_nodes() * mesh_.n_elements() * M * M, 1);
     g_data.resize(integrator_.num_nodes() * mesh_.n_elements(), 1);
     for (std::size_t i = 0; i < qn.rows(); ++i) {
-        auto tmp = F(qn.row(i));
+        std::size_t eidx = i / integrator_.num_nodes();
+
+        
+        for(std::size_t r = 0; r < N; ++r){
+            cpchip = mesh_.control_points().chip(r,M);
+            for(std::size_t c = 0; c < M; ++c){
+                double val = 0.0;
+                for(std::size_t ii = 0; ii < mesh_.element(eidx).n_functions(); ++ii){
+                    const auto & nurb = mesh_.basis()[mesh_.element(eidx)[ii]];
+                    val += nurb.derive()[c](qn.row(i)) * cpchip(nurb.index());
+                }
+                tmp.coeffRef(r,c) = val;
+            }
+        }
         auto tmp1 = tmp.transpose() * tmp;
         auto tmp2 = tmp1.inverse();
         auto tmp3 = std::sqrt(tmp1.determinant());
